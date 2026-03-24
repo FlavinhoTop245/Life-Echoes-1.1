@@ -177,7 +177,19 @@
                 }
             }, (error) => {
                 console.error('Error loading custom map:', error);
-                if (loadingLabel) loadingLabel.innerText = 'Erro ao carregar mapa.';
+                
+                // Fallback local map when CORS blocks loading via file://
+                this.mapMesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(200, 10, 20),
+                    new THREE.MeshStandardMaterial({ color: 0x33691e, flatShading: true })
+                );
+                this.mapMesh.position.y = -5;
+                this.scene.add(this.mapMesh);
+                
+                this.mapLoaded = true;
+                
+                if (loadingLabel) loadingLabel.innerText = 'CORS Erro: Mapa de Teste Carregado.';
+                if (loadingBar) loadingBar.style.width = '100%';
             });
         }
 
