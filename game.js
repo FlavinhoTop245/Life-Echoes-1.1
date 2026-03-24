@@ -391,15 +391,12 @@
             this.micoNpcs.forEach(m => m.visible = true);
 
             await sleep(600);
-            await showNarrative('Mata Atlântica. O último refúgio do mico-leão-dourado.', 3500);
 
             // Animate micos descending one by one
             for (let i = 0; i < this.micoNpcs.length; i++) {
                 await this.animateMicoDescend(this.micoNpcs[i], 3500);
                 await sleep(300);
             }
-
-            await showNarrative('A floresta está em silêncio. Seus filhotes estão com fome.', 3800);
 
             // Fade in player at base of intro tree — hide NPC micos
             this.micoNpcs.forEach(m => m.visible = false);
@@ -409,8 +406,6 @@
 
             // Camera pan to start of level
             await this.panCamera(0, 4, 1800);
-
-            await showNarrative('Encontre alimento para sua família. Suba nas árvores. Colete as frutas.', 4200);
 
             this.state = 'PLAYING';
         }
@@ -441,7 +436,7 @@
                     const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOut
                     this.camera.position.x = startX + (targetX - startX) * ease;
                     this.camera.position.y = startY + (targetY - startY) * ease;
-                    this.camera.lookAt(this.camera.position.x, this.camera.position.y - 40, 0);
+                    this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
                     if (t < 1) requestAnimationFrame(tick);
                     else resolve();
                 };
@@ -508,7 +503,7 @@
             const targetCamY = Math.max(8, this.playerY + 10);
             this.camera.position.x += (targetCamX - this.camera.position.x) * 0.1;
             this.camera.position.y += (targetCamY - this.camera.position.y) * 0.06;
-            this.camera.lookAt(this.camera.position.x, this.camera.position.y - 40, 0);
+            this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
 
             // Parallax background
             this.bgLayers.forEach(layer => {
