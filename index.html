@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Life Echoes | Experiência Standalone</title>
+    <title>Life Echoes | A Mata Atlântica Pede Socorro</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;800&display=swap" rel="stylesheet">
@@ -13,260 +13,107 @@
             --clr-forest-light: #6de2a2;
             --clr-forest-dark: #124d2f;
             --clr-golden: #FFBF00;
-            --clr-hazard: #FF6B6B;
-            --clr-industrial: #383e56;
-            --clr-industrial-dark: #121712;
+            --clr-industrial-dark: #0c1a10;
             --clr-text: #f0f0f0;
             --clr-accent: #6de2a2;
-            --clr-glass: rgba(18, 77, 47, 0.4);
+            --clr-glass: rgba(12, 26, 16, 0.55);
             --font-main: 'Outfit', sans-serif;
-            --transition-slow: 0.8s cubic-bezier(0.19, 1, 0.22, 1);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body, html { width: 100%; height: 100%; overflow: hidden; background-color: var(--clr-industrial-dark); font-family: var(--font-main); color: var(--clr-text); }
+        
         #game-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         #ui-container { position: relative; z-index: 100; width: 100%; height: 100%; pointer-events: none; }
         #ui-container > * { pointer-events: auto; }
 
+        /* ─── SPLASH ─── */
         #splash-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; justify-content: center; align-items: center;
-            background: radial-gradient(circle at center, rgba(18, 77, 47, 0.3) 0%, rgba(18, 23, 18, 0.98) 100%);
-            backdrop-filter: blur(15px); transition: all 1s ease;
+            background: radial-gradient(ellipse at 50% 60%, rgba(18, 77, 47, 0.45) 0%, rgba(12, 26, 16, 0.98) 70%);
+            backdrop-filter: blur(10px);
             z-index: 200;
+            transition: opacity 1.2s ease;
+        }
+        .content { text-align: center; max-width: 580px; padding: 2rem; }
+        .badge { background: var(--clr-accent); color: var(--clr-forest-dark); font-size: 0.65rem; font-weight: 800; padding: 4px 14px; border-radius: 50px; margin-bottom: 1.8rem; display: inline-block; letter-spacing: 2px; text-transform: uppercase; }
+        h1 { font-size: 4.5rem; font-weight: 800; letter-spacing: -2px; margin-bottom: 0.4rem; line-height: 1; }
+        .glitch-text { animation: glitch 600ms infinite alternate; }
+        .subtitle { font-weight: 300; font-size: 1rem; color: var(--clr-accent); letter-spacing: 5px; text-transform: uppercase; margin-bottom: 2.4rem; }
+        .story-teaser { background: var(--clr-glass); backdrop-filter: blur(20px); padding: 1.6rem 2rem; border-radius: 12px; margin-bottom: 2.4rem; border-left: 2px solid var(--clr-golden); font-weight: 300; line-height: 1.9; font-size: 0.95rem; opacity: 0.9; }
+        
+        button { padding: 1.1rem 2.6rem; border: none; border-radius: 14px; font-family: var(--font-main); font-weight: 800; cursor: pointer; transition: all 0.35s; letter-spacing: 1px; font-size: 1rem; }
+        .main-btn { background: var(--clr-golden); color: var(--clr-industrial-dark); }
+        .main-btn:hover { transform: translateY(-3px) scale(1.04); filter: brightness(1.12); box-shadow: 0 8px 30px rgba(255,191,0,0.3); }
+
+        .loading-bar-container { padding: 1.6rem 0 0; opacity: 0.55; }
+        .loading-label { font-size: 0.68rem; letter-spacing: 3px; text-transform: uppercase; }
+        .loading-outer { height: 2px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-top: 12px; }
+        #loading-inner { width: 0%; height: 100%; background: var(--clr-accent); transition: width 0.3s; }
+
+        /* ─── CUTSCENE NARRATIVE TEXT ─── */
+        #narrative-bar {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.88));
+            padding: 2rem 3rem 2.5rem;
+            z-index: 250;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        #narrative-text {
+            font-size: 1.05rem; font-weight: 300; line-height: 1.9;
+            color: #e8f5e9; letter-spacing: 0.5px;
+            text-shadow: 0 1px 8px rgba(0,0,0,0.8);
+            max-width: 700px;
         }
 
-        .content { text-align: center; max-width: 600px; padding: 2rem; }
-        .badge { background: var(--clr-accent); color: var(--clr-forest-dark); font-size: 0.7rem; font-weight: 800; padding: 4px 12px; border-radius: 50px; margin-bottom: 2rem; display: inline-block; }
-        h1 { font-size: 5rem; font-weight: 800; letter-spacing: -2px; margin-bottom: 0.5rem; line-height: 1; }
-        .glitch-text { animation: glitch 500ms infinite; }
-        .subtitle { font-weight: 300; font-size: 1.1rem; color: var(--clr-accent); letter-spacing: 5px; text-transform: uppercase; margin-bottom: 3rem; }
-        
-        .story-teaser { background: var(--clr-glass); backdrop-filter: blur(20px); padding: 2rem; border-radius: 12px; margin-bottom: 3rem; border-left: 2px solid var(--clr-golden); font-weight: 300; line-height: 1.8; }
+        /* ─── END SCREEN (Hidden for now) ─── */
+        .hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 
-        button { padding: 1.2rem 2.8rem; border: none; border-radius: 15px; font-family: var(--font-main); font-weight: 800; cursor: pointer; transition: all 0.4s; letter-spacing: 1px; }
-        .main-btn { background: var(--clr-golden); color: var(--clr-industrial-dark); font-size: 1.1rem; }
-        .main-btn:hover { transform: translateY(-3px) scale(1.03); filter: brightness(1.1); }
-        
-        .loading-bar-container { padding: 2rem; opacity: 0.6; }
-        .loading-outer { height: 3px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-top: 15px; }
-        #loading-inner { width: 0%; height: 100%; background: var(--clr-accent); transition: width 0.4s; }
-
-        #hud { position: absolute; top: 2rem; left: 2rem; right: 2rem; display: flex; justify-content: space-between; z-index: 50; }
-        .stats { display: flex; gap: 2rem; background: var(--clr-glass); backdrop-filter: blur(15px); padding: 15px 25px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); }
-        .bar-outer { width: 120px; height: 6px; background: rgba(0,0,0,0.3); border-radius: 10px; overflow: hidden; margin-top: 4px; }
-        #energy-inner { width: 100%; height: 100%; background: var(--clr-forest-light); transition: width 0.3s; }
-        
-        #end-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; z-index: 300; }
-        .manifesto-card { background: var(--clr-industrial-dark); padding: 4rem; border-radius: 30px; border: 2px solid var(--clr-accent); text-align: center; max-width: 600px; }
-
-        .hidden { opacity: 0; visibility: hidden; pointer-events: none; display: none !important; }
-        .active { opacity: 1; visibility: visible; }
-
-        @keyframes glitch { 0% { text-shadow: 0.05em 0 0 rgba(255,0,0,0.5), -0.05em -0.025em 0 rgba(0,255,0,0.5); } 100% { text-shadow: 0.025em 0.05em 0 rgba(255,0,0,0.5), -0.025em -0.05em 0 rgba(0,255,0,0.5); } }
+        @keyframes glitch {
+            0%   { text-shadow:  0.04em 0 0 rgba(255,80,80,0.6), -0.04em -0.02em 0 rgba(80,255,120,0.5); }
+            100% { text-shadow: -0.03em 0.03em 0 rgba(255,80,80,0.6),  0.03em -0.03em 0 rgba(80,255,120,0.5); }
+        }
     </style>
 
-    <!-- Libs -->
+    <!-- Three.js r128 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
 
     <div id="ui-container">
+
         <!-- Splash -->
         <main id="splash-screen">
             <div class="content">
                 <div class="logo-area">
-                    <span class="badge">Google Antigravity Experimental</span>
-                    <h1 class="glitch-text" data-text="LIFE ECHOES">LIFE ECHOES</h1>
+                    <span class="badge">Global Game Jam · Mata Atlântica</span>
+                    <h1 class="glitch-text">LIFE ECHOES</h1>
                     <p class="subtitle">O rugido silencioso da Mata Atlântica.</p>
                 </div>
                 <div class="story-teaser">
-                    <p>O mico-leão-dourado depende de você. Sobreviva à expansão industrial e proteja o futuro da biodiversidade brasileira.</p>
+                    <p>A floresta está em silêncio. O mico-leão-dourado e sua família dependem de você. Sobreviva. Cuide. Lembre.</p>
                 </div>
                 <div class="actions">
                     <button id="start-btn" class="main-btn">INICIAR JORNADA</button>
                 </div>
                 <div class="loading-bar-container">
-                    <div class="loading-label">Ajustando Ecossistema...</div>
+                    <div class="loading-label">Preparando a floresta…</div>
                     <div class="loading-outer"><div id="loading-inner"></div></div>
                 </div>
             </div>
         </main>
 
-        <!-- HUD -->
-        <div id="hud" class="hidden">
-            <div class="stats">
-                <div class="stat-item">
-                    <p style="font-size: 0.7rem; opacity: 0.7; letter-spacing: 1px; margin-bottom: 2px;">ENERGIA</p>
-                    <div class="bar-outer"><div id="energy-inner"></div></div>
-                </div>
-                <div class="stat-item" style="text-align: right;">
-                    <p style="font-size: 0.7rem; opacity: 0.7; letter-spacing: 1px; margin-bottom: 2px;">AMEAÇA</p>
-                    <span style="font-weight: 800; color: #6de2a2;" id="threat-level">BAIXA</span>
-                </div>
-            </div>
+        <!-- Narrative bar (cutscene + in-game story moments) -->
+        <div id="narrative-bar">
+            <p id="narrative-text"></p>
         </div>
 
-        <!-- End -->
-        <div id="end-screen" class="hidden">
-            <div class="manifesto-card">
-                <h2 style="font-size: 3rem; margin-bottom: 2rem; color: #FFBF00;">FIM DA JORNADA</h2>
-                <p id="final-message" style="margin-bottom: 3rem; line-height: 1.8; opacity: 0.8;"></p>
-                <button onclick="location.reload()" class="main-btn">TENTAR NOVAMENTE</button>
-            </div>
-        </div>
     </div>
 
-    <script>
-        (function() {
-            class Game {
-                constructor() {
-                    this.canvas = document.querySelector('#game-canvas');
-                    this.clock = new THREE.Clock();
-                    this.state = 'SPLASH';
-                    this.energy = 100;
-                    this.fruits = [];
-                    this.trees = [];
-                    this.drones = [];
-                    this.init();
-                }
-
-                init() {
-                    this.scene = new THREE.Scene();
-                    this.scene.background = new THREE.Color(0x0a110d);
-                    this.scene.fog = new THREE.FogExp2(0x0a110d, 0.012);
-
-                    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-                    this.camera.position.set(0, 60, 120);
-
-                    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
-                    this.renderer.setSize(window.innerWidth, window.innerHeight);
-                    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-                    const light = new THREE.AmbientLight(0xffffff, 0.5);
-                    this.scene.add(light);
-                    const sun = new THREE.DirectionalLight(0xfff5e1, 1);
-                    sun.position.set(50, 100, 50);
-                    this.scene.add(sun);
-
-                    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-                    this.controls.autoRotate = true;
-                    this.controls.autoRotateSpeed = 0.4;
-                    this.controls.enableZoom = false;
-
-                    this.createWorld();
-                    this.bindInput();
-                    this.animate();
-                    this.simulateLoad();
-                }
-
-                createWorld() {
-                    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ color: 0x124d2f, roughness: 0.8 }));
-                    ground.rotation.x = -Math.PI/2;
-                    this.scene.add(ground);
-
-                    for(let i=0; i<180; i++) {
-                        const x = (Math.random()-0.5)*400;
-                        const z = (Math.random()-0.5)*400;
-                        const tree = new THREE.Group();
-                        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 8), new THREE.MeshStandardMaterial({color: 0x3d2b1f}));
-                        trunk.position.y = 4;
-                        tree.add(trunk);
-                        const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(Math.random()*2+4, 0), new THREE.MeshStandardMaterial({color: 0x224422, flatShading: true}));
-                        leaves.position.y = 10;
-                        tree.add(leaves);
-                        tree.position.set(x, 0, z);
-                        tree.scale.setScalar(Math.random()*0.5 + 0.8);
-                        this.scene.add(tree);
-                        this.trees.push({mesh: tree, mat: leaves.material});
-                        if(Math.random()>0.8) this.spawnFruit(x, z);
-                    }
-                }
-
-                spawnFruit(x, z) {
-                    const fruit = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6,0), new THREE.MeshStandardMaterial({color:0xff4d00, emissive:0xff4d00, emissiveIntensity: 0.5}));
-                    fruit.position.set(x + (Math.random()-0.5)*4, 8 + Math.random()*2, z + (Math.random()-0.5)*4);
-                    this.scene.add(fruit);
-                    this.fruits.push(fruit);
-                }
-
-                bindInput() {
-                    this.keys = {};
-                    window.onkeydown = (e) => this.keys[e.key.toLowerCase()] = true;
-                    window.onkeyup = (e) => this.keys[e.key.toLowerCase()] = false;
-                    
-                    const startBtn = document.getElementById('start-btn');
-                    startBtn.addEventListener('click', () => {
-                        this.start();
-                    });
-                }
-
-                simulateLoad() {
-                    let p = 0;
-                    const el = document.getElementById('loading-inner');
-                    const i = setInterval(() => {
-                        p += Math.random()*15;
-                        if(p>=100){ p=100; clearInterval(i); }
-                        el.style.width = p+'%';
-                    }, 100);
-                }
-
-                start() {
-                    if (this.state !== 'SPLASH') return;
-                    this.state = 'PLAYING';
-                    
-                    // Create Player
-                    this.player = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1, 2), new THREE.MeshStandardMaterial({color: 0xff9900, flatShading: true}));
-                    this.player.position.set(0, 1, 0);
-                    this.scene.add(this.player);
-                    
-                    this.camera.position.set(0, 15, 25);
-                    this.controls.autoRotate = false;
-                    this.controls.enableZoom = true;
-                    
-                    document.getElementById('splash-screen').classList.add('hidden');
-                    document.getElementById('hud').classList.remove('hidden');
-                }
-
-                animate() {
-                    requestAnimationFrame(() => this.animate());
-                    const delta = this.clock.getDelta();
-
-                    if(this.state === 'PLAYING') {
-                        const speed = 0.3;
-                        if(this.keys['w']) this.player.position.z -= speed;
-                        if(this.keys['s']) this.player.position.z += speed;
-                        if(this.keys['a']) this.player.position.x -= speed;
-                        if(this.keys['d']) this.player.position.x += speed;
-                        
-                        this.camera.position.lerp(this.player.position.clone().add(new THREE.Vector3(0, 15, 25)), 0.05);
-                        this.controls.target.lerp(this.player.position, 0.1);
-
-                        this.fruits.forEach((f, i) => {
-                            if(this.player.position.distanceTo(f.position) < 3) {
-                                this.scene.remove(f); this.fruits.splice(i, 1);
-                                this.energy = Math.min(100, this.energy + 12);
-                            }
-                        });
-                        
-                        this.energy -= 0.05;
-                        document.getElementById('energy-inner').style.width = this.energy + '%';
-                        if(this.energy <= 0) {
-                            this.state = 'END';
-                            document.getElementById('hud').classList.add('hidden');
-                            document.getElementById('end-screen').classList.remove('hidden');
-                            document.getElementById('final-message').innerText = "O rastro da destruição foi mais rápido. Sem energia para lutar, o mico torna-se parte de um passado vibrante que agora é cinzas.";
-                        }
-                    }
-                    this.controls.update();
-                    this.renderer.render(this.scene, this.camera);
-                }
-            }
-            window.onload = () => { new Game(); };
-        })();
-    </script>
+    <script src="game.js"></script>
 </body>
 </html>
