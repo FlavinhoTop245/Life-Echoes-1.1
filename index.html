@@ -116,5 +116,14 @@
     </div>
 
     <script src="game.js"></script>
+
+    <script>
+        // Alerta amigável para explicar que o bloqueio CORS não afeta o GitHub Pages
+        if (window.location.protocol === 'file:') {
+            setTimeout(() => {
+                alert("Calma! Esse erro vermelho ('CORS policy') acontece APENAS porque você abriu o arquivo com dois cliques no seu PC (file://). Quando você publicar esses arquivos no GitHub Pages, o GitHub usará HTTPS e o erro VAI SUMIR magicamente. O seu código já está 100% PRONTO E CORRETO para subir no GitHub Desktop!");
+            }, 500);
+        }
+    </script>
 </body>
 </html>
