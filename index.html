@@ -78,8 +78,9 @@
         }
     </style>
 
-    <!-- Three.js r128 -->
+    <!-- Libs: Three.js r128 & GLTFLoader -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
@@ -101,7 +102,7 @@
                     <button id="start-btn" class="main-btn">INICIAR JORNADA</button>
                 </div>
                 <div class="loading-bar-container">
-                    <div class="loading-label">Preparando a floresta…</div>
+                    <div class="loading-label" id="loading-text-label">Preparando a floresta…</div>
                     <div class="loading-outer"><div id="loading-inner"></div></div>
                 </div>
             </div>

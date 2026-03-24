@@ -60,10 +60,11 @@
             this.facingRight = true;
 
             // Collections
-            this.platforms  = []; // { mesh, x, y, w, h }
             this.fruits     = []; // { mesh, x, y, collected }
-            this.micoNpcs   = []; // extra mico models for cutscene
-            this.bgLayers   = [];
+            
+            this.mapMesh    = null;
+            this.mapLoaded  = false;
+            this.raycaster  = new THREE.Raycaster();
 
             this.fruitsCollected = 0;
             this.keys = {};
@@ -99,10 +100,9 @@
             this.scene.add(fill);
 
             // Build world
-            this.buildBackground();
-            this.buildLevel();
+            // Load Custom GLTF Map
+            this.loadMap();
             this.buildPlayer();
-            this.buildNpcMicos();
 
             // Events
             window.addEventListener('keydown', e => {
@@ -115,12 +115,11 @@
             });
             window.addEventListener('resize', () => this.onResize());
 
-            // Loading bar animation
-            this.simulateLoading();
+
 
             // Start button
             document.getElementById('start-btn').addEventListener('click', () => {
-                if (this.state === 'LOADING') this.runCutscene();
+                if (this.state === 'LOADING' && this.mapLoaded) this.runCutscene();
             });
 
             // Render loop
@@ -134,154 +133,51 @@
 
         updateCameraProjection() {
             const aspect = window.innerWidth / window.innerHeight;
-            const zoom   = 14; // units visible vertically / 2
+            const zoom   = 18; // wider view to see more of the map
             this.camera = new THREE.OrthographicCamera(
                 -zoom * aspect, zoom * aspect,
                 zoom, -zoom,
-                0.1, 500
+                0.1, 600
             );
-            // Position camera to look straight at the XY plane, offset in Z
-            this.camera.position.set(0, 8, 40);
-            this.camera.lookAt(0, 8, 0);
+            this.camera.position.set(0, 10, 50);
+            this.camera.lookAt(0, 10, 0);
         }
 
-        // ─── BACKGROUND PARALLAX LAYERS ──────────────────────────────────────
-        buildBackground() {
-            // Sky gradient via scene background (solid color + fog)
-            this.scene.background = makeColor(0x87ceeb);
+        // ─── MAP LOADING ───────────────────────────────────────────────────────
+        loadMap() {
+            const loader = new THREE.GLTFLoader();
+            const loadingBar = document.getElementById('loading-inner');
+            const loadingLabel = document.getElementById('loading-text-label');
+            
+            loader.load('low_poly_forest.glb', (gltf) => {
+                this.mapMesh = gltf.scene;
 
-            // Layer 1: distant mountains / hills (Z = -60)
-            const hillMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, flatShading: true });
-            for (let i = -6; i <= 6; i++) {
-                const h = 6 + Math.random() * 10;
-                const hill = new THREE.Mesh(
-                    new THREE.ConeGeometry(8 + Math.random() * 5, h, 5),
-                    hillMat.clone()
-                );
-                hill.material.color.set(new THREE.Color().setHSL(0.32, 0.5 + Math.random() * 0.2, 0.25 + Math.random() * 0.12));
-                hill.position.set(i * 16 + (Math.random() - 0.5) * 8, -3 + h / 2, -60);
-                this.scene.add(hill);
-                this.bgLayers.push({ mesh: hill, parallaxFactor: 0.08 });
-            }
+                // Auto-fit: scale so the model spans ~200 game units wide
+                const box = new THREE.Box3().setFromObject(this.mapMesh);
+                const size = box.getSize(new THREE.Vector3());
+                const scaleFactor = 200 / Math.max(size.x, 0.001);
+                this.mapMesh.scale.setScalar(scaleFactor);
 
-            // Layer 2: mid-forest trees (Z = -30)
-            for (let i = -10; i <= 10; i++) {
-                const t = this.makeTreeMesh(0.7 + Math.random() * 0.4, 0x388e3c);
-                t.position.set(i * 9 + (Math.random() - 0.5) * 4, -2, -30);
-                this.scene.add(t);
-                this.bgLayers.push({ mesh: t, parallaxFactor: 0.25 });
-            }
+                // Re-center: rest bottom at y=0, center on x=0
+                const scaledBox = new THREE.Box3().setFromObject(this.mapMesh);
+                this.mapMesh.position.x -= scaledBox.getCenter(new THREE.Vector3()).x;
+                this.mapMesh.position.y -= scaledBox.min.y;
 
-            // Ground plane
-            const ground = new THREE.Mesh(
-                new THREE.PlaneGeometry(800, 20),
-                new THREE.MeshStandardMaterial({ color: 0x33691e, flatShading: true })
-            );
-            ground.rotation.x = -Math.PI / 2;
-            ground.position.set(0, -2, -5);
-            ground.receiveShadow = true;
-            this.scene.add(ground);
-        }
-
-        makeTreeMesh(scale = 1, leafColor = 0x2e7d32) {
-            const g = new THREE.Group();
-            const trunk = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.25 * scale, 0.4 * scale, 5 * scale, 5),
-                new THREE.MeshStandardMaterial({ color: 0x5d4037 })
-            );
-            trunk.position.y = 2.5 * scale;
-            trunk.castShadow = true;
-            g.add(trunk);
-            const leaves = new THREE.Mesh(
-                new THREE.IcosahedronGeometry((2.5 + Math.random()) * scale, 0),
-                new THREE.MeshStandardMaterial({ color: leafColor, flatShading: true })
-            );
-            leaves.position.y = (6 + Math.random()) * scale;
-            leaves.castShadow = true;
-            g.add(leaves);
-            return g;
-        }
-
-        // ─── LEVEL LAYOUT ────────────────────────────────────────────────────
-        buildLevel() {
-            // Platform data: [x_center, y_top, width, height, type]
-            // type: 'ground' | 'branch' | 'log'
-            const pData = [
-                // Ground segment
-                { x:  0,   y: -2,   w: 60,  h: 2,   type: 'ground' },
-                // Right extension (scroll area)
-                { x: 60,   y: -2,   w: 50,  h: 2,   type: 'ground' },
-                { x: 110,  y: -2,   w: 40,  h: 2,   type: 'ground' },
-
-                // Platforms / branches (staggered heights)
-                { x:  8,   y:  5,   w: 8,   h: 1.2, type: 'branch' },
-                { x:  20,  y:  8,   w: 7,   h: 1.2, type: 'branch' },
-                { x:  31,  y:  5.5, w: 6,   h: 1.2, type: 'branch' },
-                { x:  42,  y:  9,   w: 8,   h: 1.2, type: 'branch' },
-                { x:  53,  y:  6,   w: 6,   h: 1.2, type: 'branch' },
-                { x:  63,  y: 11,   w: 7,   h: 1.2, type: 'branch' },
-                { x:  74,  y:  7,   w: 6,   h: 1.2, type: 'branch' },
-                { x:  85,  y: 13,   w: 9,   h: 1.2, type: 'branch' },
-                { x:  96,  y:  9,   w: 6,   h: 1.2, type: 'branch' },
-                { x: 107,  y: 14,   w: 8,   h: 1.2, type: 'branch' },
-                { x: 118,  y: 10,   w: 7,   h: 1.2, type: 'branch' },
-            ];
-
-            pData.forEach(p => {
-                const isGround = p.type === 'ground';
-                const color    = isGround ? 0x33691e : 0x5d4037;
-                const mesh = new THREE.Mesh(
-                    new THREE.BoxGeometry(p.w, p.h, 4),
-                    new THREE.MeshStandardMaterial({ color, flatShading: !isGround })
-                );
-                mesh.position.set(p.x, p.y - p.h / 2, 0);
-                mesh.receiveShadow = true;
-                mesh.castShadow    = !isGround;
-                this.scene.add(mesh);
-
-                // Add canopy trees on top of ground sections
-                if (isGround) {
-                    const treeCount = Math.floor(p.w / 8);
-                    for (let i = 0; i < treeCount; i++) {
-                        const tx = p.x - p.w / 2 + 4 + i * 8 + (Math.random() - 0.5) * 3;
-                        const tree = this.makeTreeMesh(0.8 + Math.random() * 0.5, 0x388e3c);
-                        tree.position.set(tx, p.y, -2 + (Math.random() - 0.5) * 2);
-                        this.scene.add(tree);
-                    }
-                }
-
-                // Store for collision (AABB in XY)
-                this.platforms.push({
-                    mesh,
-                    x: p.x - p.w / 2,
-                    y: p.y - p.h,
-                    w: p.w,
-                    h: p.h,
-                    top: p.y  // top surface Y
+                this.scene.add(this.mapMesh);
+                this.mapMesh.traverse(child => {
+                    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
                 });
-            });
 
-            // ─── FRUITS (scattered on platforms) ─────────────────────────────
-            const fruitPositions = [
-                { x:  8,   y:  7.2  },
-                { x: 20,   y: 10.2  },
-                { x: 31,   y:  7.7  },
-                { x: 42,   y: 11.2  },
-                { x: 53,   y:  8.2  },
-                { x: 63,   y: 13.2  },
-                { x: 74,   y:  9.2  },
-                { x: 85,   y: 15.2  },
-            ];
-
-            fruitPositions.forEach(fp => {
-                const fruitMesh = new THREE.Mesh(
-                    new THREE.DodecahedronGeometry(0.55, 0),
-                    new THREE.MeshStandardMaterial({ color: 0xff6f00, emissive: 0xbf360c, emissiveIntensity: 0.5, flatShading: true })
-                );
-                fruitMesh.position.set(fp.x, fp.y, 0);
-                fruitMesh.castShadow = true;
-                this.scene.add(fruitMesh);
-                this.fruits.push({ mesh: fruitMesh, x: fp.x - 0.55, y: fp.y - 0.55, w: 1.1, h: 1.1, collected: false });
+                this.mapLoaded = true;
+                if (loadingLabel) loadingLabel.innerText = 'Floresta Pronta! Jogue agora.';
+                if (loadingBar) loadingBar.style.width = '100%';
+            }, (xhr) => {
+                if (xhr.lengthComputable) {
+                    if (loadingBar) loadingBar.style.width = `${(xhr.loaded / xhr.total) * 100}%`;
+                }
+            }, (error) => {
+                console.error('Error loading custom map:', error);
+                if (loadingLabel) loadingLabel.innerText = 'Erro ao carregar mapa.';
             });
         }
 
@@ -335,96 +231,25 @@
             this.playerY = 2;
         }
 
-        // ─── NPC MICOS for cutscene ───────────────────────────────────────────
-        buildNpcMicos() {
-            // Build 3 NPC mico models high in a big intro tree
-            const introTree = this.makeTreeMesh(2.5, 0x2e7d32);
-            introTree.position.set(-8, -2, 0);
-            this.scene.add(introTree);
-            this.introTree = introTree;
 
-            const colors = [0xf9a825, 0xffb300, 0xffa000];
-            for (let i = 0; i < 3; i++) {
-                const npc = this.makeSimpleMico(colors[i]);
-                // Start high on the tree
-                npc.position.set(-8 + (i - 1) * 0.9, 16 + i * 0.6, 0.3);
-                npc.visible = false;
-                this.scene.add(npc);
-                this.micoNpcs.push(npc);
-            }
-        }
-
-        makeSimpleMico(color) {
-            const g = new THREE.Group();
-            const mat = new THREE.MeshStandardMaterial({ color, flatShading: true });
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.7, 0.5), mat);
-            body.position.y = 0.35; g.add(body);
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.55), mat);
-            head.position.y = 0.95; g.add(head);
-            const maneMat = new THREE.MeshStandardMaterial({ color: 0xffb300, flatShading: true });
-            const mane = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), maneMat);
-            mane.position.set(0, 0.9, 0); g.add(mane);
-            return g;
-        }
-
-        // ─── LOADING BAR ─────────────────────────────────────────────────────
-        simulateLoading() {
-            let p = 0;
-            const el = document.getElementById('loading-inner');
-            const iv = setInterval(() => {
-                p += Math.random() * 20;
-                if (p >= 100) { p = 100; clearInterval(iv); }
-                el.style.width = `${p}%`;
-            }, 120);
-        }
 
         // ─── CUTSCENE ────────────────────────────────────────────────────────
         async runCutscene() {
             this.state = 'CUTSCENE';
             await hideSplash();
 
-            // Point camera at intro tree
-            this.camera.position.set(-8, 10, 40);
-            this.camera.lookAt(-8, 10, 0);
-
-            // Show NPC micos on tree
-            this.micoNpcs.forEach(m => m.visible = true);
-
-            await sleep(600);
-
-            // Animate micos descending one by one
-            for (let i = 0; i < this.micoNpcs.length; i++) {
-                await this.animateMicoDescend(this.micoNpcs[i], 3500);
-                await sleep(300);
-            }
-
-            // Fade in player at base of intro tree — hide NPC micos
-            this.micoNpcs.forEach(m => m.visible = false);
-            this.playerX = -6;
-            this.playerY = -0.6;
+            // Start high so player falls down onto the map via raycaster gravity
+            this.playerX = 0;
+            this.playerY = 80;
             this.playerGroup.position.set(this.playerX, this.playerY, 0);
 
-            // Camera pan to start of level
-            await this.panCamera(0, 4, 1800);
+            // Camera: pan to map center height
+            await this.panCamera(0, 12, 1800);
 
             this.state = 'PLAYING';
         }
 
-        animateMicoDescend(mico, duration) {
-            return new Promise(resolve => {
-                const startY  = mico.position.y;
-                const targetY = -0.8; // ground level
-                const start   = performance.now();
-                const tick    = (now) => {
-                    const t = Math.min((now - start) / duration, 1);
-                    const ease = 1 - Math.pow(1 - t, 3);
-                    mico.position.y = startY + (targetY - startY) * ease;
-                    if (t < 1) requestAnimationFrame(tick);
-                    else resolve();
-                };
-                requestAnimationFrame(tick);
-            });
-        }
+
 
         panCamera(targetX, targetY, duration) {
             return new Promise(resolve => {
@@ -463,20 +288,28 @@
             this.playerX += this.vx;
             this.playerY += this.vy;
 
-            // Platform collision
+            // Platform collision using Raycaster (Dynamic ground detection)
             this.onGround = false;
-            const px = this.playerX;
-            const py = this.playerY;
-
-            for (const plat of this.platforms) {
-                // Only resolve landing on top (falling down onto platform)
-                if (this.vy <= 0 &&
-                    px + PLAYER_W > plat.x && px < plat.x + plat.w &&
-                    py < plat.top && py + PLAYER_H > plat.top - 0.5) {
-                    this.playerY = plat.top;
-                    this.vy      = 0;
-                    this.onGround = true;
+            let floorY = -100;
+            
+            if (this.mapMesh) {
+                // Raycast downwards from slightly above the player
+                const origin = new THREE.Vector3(this.playerX + PLAYER_W / 2, this.playerY + 2.0, 0);
+                const dir = new THREE.Vector3(0, -1, 0);
+                this.raycaster.set(origin, dir);
+                
+                // Intersect with map meshes
+                const intersects = this.raycaster.intersectObject(this.mapMesh, true);
+                if (intersects.length > 0) {
+                    floorY = intersects[0].point.y; // The highest point directly under the player
                 }
+            }
+
+            // Hit ground
+            if (this.vy <= 0 && this.playerY <= floorY) {
+                this.playerY = floorY;
+                this.vy = 0;
+                this.onGround = true;
             }
 
             // Death zone (fell below map)
@@ -505,10 +338,7 @@
             this.camera.position.y += (targetCamY - this.camera.position.y) * 0.06;
             this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
 
-            // Parallax background
-            this.bgLayers.forEach(layer => {
-                layer.mesh.position.x = -targetCamX * layer.parallaxFactor;
-            });
+
 
             // Fruit collection
             this.fruits.forEach(fr => {
