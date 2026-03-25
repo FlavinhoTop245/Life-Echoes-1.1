@@ -112,6 +112,60 @@
                     if (!this.debugMode) {
                         const hud = document.getElementById('coord-hud');
                         if (hud) hud.style.opacity = '0';
+                    } else {
+                        const hud = document.getElementById('coord-hud');
+                        if (hud) {
+                            hud.style.opacity = '1';
+                            hud.innerText = "Modo Debug ON: Voe com WASD. P=Criar Ponto, O=Copiar Rota";
+                        }
+                    }
+                }
+
+                // Ferramenta de Mapeamento de Caminho no Debug
+                if (this.debugMode && this.state === 'PLAYING') {
+                    if (e.code === 'KeyP') {
+                        const vx = parseFloat(this.playerGroup.position.x.toFixed(1));
+                        const vz = parseFloat(this.playerGroup.position.z.toFixed(1));
+                        
+                        if (!this.customPathPoints) {
+                            this.customPathPoints = [];
+                            this.customPathGroup = new THREE.Group();
+                            this.scene.add(this.customPathGroup);
+                        }
+                        
+                        this.customPathPoints.push(new THREE.Vector3(vx, 0, vz));
+                        
+                        // Dropar uma esfera amarela (waypoint)
+                        const geo = new THREE.SphereGeometry(1.5, 8, 8);
+                        const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+                        const marker = new THREE.Mesh(geo, mat);
+                        marker.position.set(vx, this.playerGroup.position.y, vz);
+                        this.customPathGroup.add(marker);
+
+                        const hud = document.getElementById('coord-hud');
+                        if (hud) hud.innerText = `Ponto Adicionado: X:${vx} Z:${vz} (Total: ${this.customPathPoints.length})`;
+                        console.log(`Ponto gravado: new THREE.Vector3(${vx}, 0, ${vz})`);
+                    }
+                    
+                    if (e.code === 'KeyO') {
+                        if (!this.customPathPoints || this.customPathPoints.length === 0) {
+                            console.log("Nenhum ponto gravado ainda. Pressione P para gravar pontos.");
+                            return;
+                        }
+                        let txt = "const points = [\n";
+                        this.customPathPoints.forEach(p => {
+                            txt += `    new THREE.Vector3(${p.x}, 0, ${p.z}),\n`;
+                        });
+                        txt += "];";
+                        
+                        navigator.clipboard.writeText(txt).then(() => {
+                            console.log("CÓDIGO COPIADO!");
+                            console.log(txt);
+                            const hud = document.getElementById('coord-hud');
+                            if (hud) hud.innerText = `ROTA COPIADA PARA A ÁREA DE TRANSFERÊNCIA! (${this.customPathPoints.length} pontos)`;
+                        }).catch(err => {
+                            console.log("Erro ao copiar. Segue o código:\n" + txt);
+                        });
                     }
                 }
             });
