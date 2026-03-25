@@ -30,3 +30,141 @@ Devido às restrições de segurança do navegador (CORS) para módulos JavaScri
 
 ---
 *Desenvolvido em C:\Users\26012378\Desktop\Life Echoes\Life Echoes 1.1*
+
+## 🛠️ Notas de Manutenção (Shader de Vento)
+> [!NOTE]
+> O efeito dinâmico de vento nas árvores e flores foi implementado através de um **Vertex Shader** customizado via `onBeforeCompile` dentro de `game.js`. Isso distorce ativamente a geometria da malha durante a renderização para economizar performance e dispensar animações internas no arquivo `.glb`.  
+> *Atenção Futura*: Todos os numerais da onda do vento (força constante `0.008`, frequência multiaxial de `0.05` e offset basal de `2.0`) foram calibrados à mão para a topologia atual e distância de câmera atual. Se o `modelMenu.glb` for reescalado, ou trocado radicalmente em conversas futuras, tais variáveis matriciais em `game.js` devem ser lidas e possivelmente ajustadas novamente.
+
+## 📜 Log de Modificações (Patches)
+
+### [Patch 1.32.0] - Março de 2026
+- **Layout Shift Prevention (Anti-Teleporte de Textos)**: Corrigido o famoso problema de "Flash of Unstyled Text" (FOUT). Durante o milissegundo de carregamento da fonte customizada (`Almendra`), o navegador renderizava o título com uma fonte padrão de dimensões menores, e, ao concluir o download, atualizava para o tamanho real. Como o contêiner era centrado verticalmente (`align-items: center`), esse recálculo de altura das letras forçava toda a caixa a pular de cima para baixo de uma vez só. Adicionado `font-display: block;` nos `@font-face` do CSS, bloqueando qualquer renderização da aba do menu até que o modelo matemátio da fonte original esteja 100% lido, garantindo que o texto já nasça instantaneamente no "lugar esperado ao mesmo tempo".
+
+### [Patch 1.31.0] - Março de 2026
+- **Estabilidade de Interface**: Solucionado o "bug do salto" que retornou após a implementação das barras de carregamento em `game.js`. Havia um problema na classe `.hidden` do CSS (`style.css`), que usava a propriedade `display: none`. Mudar de display removia os elementos sumariamente do fluxo da página, colapsando as "costas" do contêiner flexível e puxando todos os botões para cima num tranco abrupto. Substituí por propriedades de invisibilidade suave (`opacity: 0` e `visibility: hidden`), preservando a gaveta virtual de espaço do elemento para que as caixas da UI nunca precisem se reajustar bruscamente.
+
+### [Patch 1.30.0] - Março de 2026
+- **Realinhamento de Iluminação Solar**: Corrigido o enquadramento "silhueta" escuro da floresta. O eixo Z da luz do sol (`DirectionalLight`) foi invertido de `Z: 30` (cujas castigadas pelas costas deixavam a frente da floresta onde a câmera fica na escuridão pura) para `Z: -30` (A luz agora fica atrás e acima da câmera iterando diretamente nas frentes e folhas das árvores visíveis). Exposição da lente (`toneMappingExposure`) também aumentada de `1.15` para `1.6`.
+
+### [Patch 1.29.0] - Março de 2026
+- **Iluminação HDR Cinematográfica**: Para resolver o problema de luminosidade sem "lavar" as sombras com luz ambiente artificial pura (branca crua), foram implementadas três grandes mudanças em `game.js`:
+  1. Utilização de **HemisphereLight** (luz de duas cores, simulando a abóbada celeste batendo em cima das folhas em contrapartida ao reflexo sombrio da terra batendo por baixo). 
+  2. A luz principal (Sol) teve a sua intensidade brutalmente escalonada para `2.5`, fortalecendo os raios diretos para "chapar" claridade em locais diretos e gerando sombras duras e contrastantes.
+  3. Para impedir que a tela virasse um borrão brilhoso, ativamos o **ACESFilmicToneMapping** direto no WebGLRenderer, um standard de colorimetria de cinema que lida com excessos de brilho, mantendo o nível global da exposição e trazendo cores vibrantes e ricas nas transições para o escuro.
+
+### [Patch 1.28.0] - Março de 2026
+- **Sincronicidade de Vento (Anti-Tearing)**: Solucionado o "derretimento/mescla" das flores durante o Shader de Vento. A frequência da onda do vento relativa à variação espacial dos vértices (`position.x` e `position.z`) foi drasticamente reduzida (de fator `1.5` para `0.05`). Com isso, a onda de flexão se torna gigantesca, fazendo com que todos os vértices da mesma flor ou arbusto sejam empurrados uniformemente, em vez de torcidos independentemente, mantendo a geometria intacta.
+
+### [Patch 1.27.0] - Março de 2026
+- **Sintonia do Vento**: Modificada a fórmula do Vertex Shader do Efeito de Vento de `max(0.0, position.y - 0.1)` (que ancorava rigidamente os componentes baixos) para `position.y + 2.0`. Isso aplica um *offset* universal de fluidez, forçando toda a vegetação na camada Y=0 a participar do balanço, injetando movimento em todo o terreno sem quebrar os limites.
+
+### [Patch 1.26.0] - Março de 2026
+- **Tecnologia de Vento (Shader Customizado)**: Implementado um efeito de "vento orgânico" que nada tem a ver com animações embutidas no modelo original. Através de uma injeção customizada no *Vertex Shader* do WebGL (via método `onBeforeCompile` do material), os vértices (arestas) das copas das árvores, montanhas e flores agora ondulam ritmicamente com base na passagem do tempo (sine waves assimétricas). A fórmula leva a altura (`position.y`) em conta para que a raiz e a base do cenário permaneçam ancoradas perfeitamente no chão.
+
+### [Patch 1.25.0] - Março de 2026
+- **Merguho Final ao Nível Zero**: A câmera foi reposicionada verticalmente para exatamente zero (`y: 0`), encostando na linha de base geométrica do modelo, enquanto mantém o recuo atual (`z: -1.3`) e o ponto focal mais alto (`lookAt Y: 0.4`), intensificando muito o ângulo de visão contra-plongée em direção à floresta.
+
+### [Patch 1.24.0] - Março de 2026
+- **Merguho de Câmera**: Redução da altura da câmera (`y: 0.2`) mantendo o ponto de foco mais alto (`lookAt Y: 0.4`), gerando o efeito clássico de contra-plongée (câmera baixa olhando levemente para cima). Isso confere um tom épico à vegetação do cenário.
+
+### [Patch 1.23.0] - Março de 2026
+- **Alinhamento Térreo**: Câmera abaixada para `y: 0.4` e avançada para `z: -1.3`, com foco nivelado perfeitamente paralelo ao solo (`lookAt Y: 0.4`). Essa aproximação remove distrações e foca apenas no relevo e textura do cenário à frente.
+
+### [Patch 1.22.0] - Março de 2026
+- **Ajuste de Terra (`lookAt Y: 0.2`)**: A câmera agora possui uma leve inclinação para baixo, valorizando a renderização do solo gramado e diminuindo a ênfase no céu e no horizonte profundo.
+
+### [Patch 1.21.0] - Março de 2026
+- **Aperfeiçoamento Final**: Câmera ajustada para `z: -1.5` (a mais próxima até agora nesta configuração), e o `lookAt` foi elevado para `y: 1.0`, gerando uma leve inclinação para cima. Esse ângulo "olhando das sombras" acentua a grandeza das árvores, que preenchem uma fatia maior do céu azul do menu.
+
+### [Patch 1.20.0] - Março de 2026
+- **Lapidação de Foco (`z: -1.8`)**: Mais um micro-avanço de proximidade no eixo Z. A câmera aproxima-se ativamente da folhagem na margem do modelo, mantendo a altura base `y: 0.6` para tentar extrair o melhor enquadramento 3D possível.
+
+### [Patch 1.19.0] - Março de 2026
+- **Ajuste Fino de Preenchimento**: Câmera ajustada em microlimites para baixo (`y: 0.6`) e mais perto do modelo (`z: -2.2`) visando ampliar a projeção da floresta na tela e minimizar o espaço vazio nas bordas inferiores.
+
+### [Patch 1.18.0] - Março de 2026
+- **Aproximação Final de Perspectiva**: Avançada a câmera para `z: -2.5` mantendo a altura `y: 0.8`, cortando o foco excedente nos cantos e trazendo a flora e as estruturas do modelo 3D para o primeiro plano.
+
+### [Patch 1.17.0] - Março de 2026
+- **Meio-Termo de Perspectiva**: Aplicada as coordenadas `y: 0.8` e `z: -3.0` como uma tentativa de alcançar um meio-termo entre a visão térrea e a panorâmica, buscando o enquadramento ideal para o relevo do terreno central.
+
+### [Patch 1.16.0] - Março de 2026
+- **Redefinição Panorâmica**: A câmera foi reposicionada para as coordenadas solicitadas (`y: 1.2`, `z: -3.5`), proporcionando uma visão mais elevada e distante do modelo. Além disso, o foco da câmera (`lookAt`) foi completamente zerado (`0, 0, 0`), ancorando a perspectiva perfeitamente no centro (origem) da cena sem qualquer desvio vertical ou lateral.
+
+### [Patch 1.15.0] - Março de 2026
+- **Nivelamento de Câmera**: Removida a inclinação "para cima" da câmera do menu (`lookAt` `Y` alterado de `1.5` para `-0.5`, igualando a altura da câmera). A visão agora segue reta em direção ao modelo de terreno, no que seria um "ponto de fuga" perfeitamente alinhado.
+
+### [Patch 1.14.0] - Março de 2026
+- **Exploração de Câmera**: Ajustadas as coordenadas para `z: -3.0` (maior recuo) e `y: -0.5` (abaixo do solo) como requisitado no teste iterativo para aumentar a parcela da tela coberta pelas árvores no horizonte.
+
+### [Patch 1.13.0] - Março de 2026
+- **Ajuste Fino ("Visão Abaixo do Solo")**: Câmera do menu reposicionada para as coordenadas precisas solicitadas (`z: -2.0`, `y: -0.2`) para testar uma angulação ainda mais baixa e próxima, forçando o modelo a ocupar mais espaço vertical na tela e destacando as copas das árvores no céu.
+
+### [Patch 1.12.0] - Março de 2026
+- **Ajuste Fino ("Visão de Trilha")**: A câmera foi rebaixada ao limite do terreno (`y: 0.15`) e recuada de volta em relação ao centro (`z: -2.8`), olhando para cima em direção à copa das árvores. Isso maximiza a sensação de profundidade, deixando a silhueta da floresta contra o céu azul igual à da imagem de referência estática.
+
+### [Patch 1.11.0] - Março de 2026
+- **Câmera "Inside the Forest"**: Redução dramática na altura e distância da câmera do menu (`y: 0.4`, `z: -1.2`) e ajuste de ângulo (`lookAt` apontando para cima). O objetivo é replicar a sensação da imagem `fundo.png`, onde o jogador se sente "dentro" da vegetação, com flores no primeiro plano e árvores preenchendo o fundo.
+
+### [Patch 1.10.0] - Março de 2026
+- **Inversão de Câmera 3D**: Câmera do menu rotacionada em 180º (posição `z` negativa) para exibir a face oposta do modelo 3D.
+- **Micro-Ajuste de Distância**: Zoom significativamente aumentado e campo de visão rebaixado para capturar melhor os detalhes do terreno e preencher o fundo.
+
+### [Patch 1.9.0] - Março de 2026
+- **Ajuste de Câmera 3D**: Câmera do menu reposicionada drasticamente (`y: 1.5`, `z: 4`) para dar uma visão térrea e imersiva do modelo, ocupando mais espaço visual na tela.
+- **Foco Fixo**: Removida a rotação automática do modelo 3D no menu principal para manter o foco constante no enquadramento.
+
+### [Patch 1.8.1] - Março de 2026
+- **Resiliência de Sistema (CORS)**: Implementado um fallback no `game.js`. Caso navegadores bloqueiem o carregamento dos arquivos `.glb` localmente via protocolo `file:///`, a imagem estática `fundo.png` é ativada automaticamente, evitando telas pretas/azuis.
+- **Ferramenta de Servidor**: Adicionado script utilitário `iniciar_jogo.py` para permitir que usuários Windows iniciem rapidamente um servidor local e contornem bloqueios de CORS com dois cliques.
+
+### [Patch 1.8.0] - Março de 2026
+- **Refinamento de Entrada**: Removida a animação de deslocamento vertical (que causava um "salto") ao carregar o menu.
+- **Fade Unificado**: Implementada transição suave de opacidade (`fade-in`) durando 2 segundos para o fundo e o conteúdo do menu.
+- **Sincronização Visual**: Sincronizado o aparecimento dos textos com o carregamento da imagem de fundo para uma experiência mais limpa e profissional.
+
+### [Patch 1.7.0] - Março de 2026
+- **Refinamento de Proporções**: Janela de opções ajustada para um formato mais esguio (`650px`), melhorando a estética geral.
+- **Scrollbar Personalizada**: Implementada barra de rolagem estilizada em amarelo arredondado, integrada ao design da janela para substituir o padrão do navegador.
+- **Melhoria de Padding**: Ajustado o espaçamento interno para evitar sobreposição da barra de rolagem com os elementos da interface.
+
+### [Patch 1.6.0] - Março de 2026
+- **Centralização do Menu "Options"**: Corrigido o posicionamento da janela para garantir que ela esteja sempre centralizada vertical e horizontalmente em qualquer resolução.
+- **Responsividade**: Ajustada a largura máxima e adicionado suporte para rolagem interna em telas menores, evitando que o menu fique cortado ou esticado.
+- **Aprimoramento Visual**: Aumentada a espessura da borda e o desfoque de fundo para maior clareza visual.
+
+### [Patch 1.5.0] - Março de 2026
+- **Reformulação da Janela "Options"**: 
+    - Novo layout em duas colunas para facilitar a visualização de comandos.
+    - Implementação de sliders de volume interativos (barra com círculo) com feedback de porcentagem em tempo real.
+    - Adicionada funcionalidade de "Rebind" (teste visual); ao clicar em uma tecla, o jogo aguarda uma nova entrada do teclado.
+- **Melhoria Estética**: Janela de opções agora conta com animação de "slide-up" e acabamento refinado com bordas douradas e sombras profundas.
+- **Interatividade Total**: Sliders e botões agora respondem visualmente e logicamente às ações do usuário.
+
+### [Patch 1.4.0] - Março de 2026
+- **Recuperação de Bibliotecas**: Re-inseridas as bibliotecas `Three.js` e `GLTFLoader` que haviam sido removidas acidentalmente, corrigindo o erro `THREE is not defined`.
+- **Limpeza de Estrutura**: Corrigidas duplicatas de tags `<body>` e `<script>` no final do `index.html`.
+
+### [Patch 1.3.0] - Março de 2026
+- **Correção Visual**: Adicionado `assets/fundo.png` como imagem estática de fundo para garantir compatibilidade caso os modelos 3D falhem ao carregar localmente.
+- **Estabilidade**: Implementado tratamento de erros no carregamento de assets para evitar que o jogo trave em telas pretas ou em estado de "Loading" infinito.
+- **Funcionamento dos Botões**: Corrigido bug na lógica de estados que impedia a interação com os botões "Start", "Options" e "Quit" quando os modelos 3D demoravam ou falhavam.
+- **Limpeza de Código**: Removidos atributos redundantes que causavam erros de execução no console.
+
+### [Patch 1.2.0] - Março de 2026
+- **Novo Menu Principal**: Implementação de interface 3D integrada com o modelo `modelMenu.glb`.
+- **Tipografia Personalizada**: 
+    - `Almendra-Bold` para o título "LIFE ECHOES".
+    - `IMFellEnglish` para botões e funções.
+    - `PlayfairDisplaySC` para textos auxiliares e números nas opções.
+- **Interatividade**: Adicionado efeito de "hover" (escala dinâmica) nos botões do menu.
+- **Sistema de Opções**: Criação de janela modal para ajuste de volumes e visualização de comandos.
+- **Função Quit**: Implementação de efeito "fade-to-black" para encerramento da sessão.
+- **Otimização de Carregamento**: Barra de progresso integrada para os modelos 3D do mapa e menu.
+
+### [Patch 1.1.0] - Março de 2026
+- **Início do Acompanhamento**: Implementação do sistema de logs no README.md para documentar a evolução do projeto.
+- **Integração Assistente**: Configuração do ambiente para desenvolvimento assistido por Antigravity (Google DeepMind).
+
+
