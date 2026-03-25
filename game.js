@@ -263,11 +263,41 @@
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.6), mat);
             body.position.y = 0.5;
             this.playerGroup.add(body);
-            // (Simpilifed for now to ensure working state)
             this.playerGroup.position.set(-999, 0, 0);
             this.scene.add(this.playerGroup);
-            this.playerX = 0; this.playerY = 2; this.vx = 0; this.vy = 0;
+            
+            this.playerY = 2; this.vy = 0;
             this.onGround = false; this.facingRight = true;
+            this.pathProgress = 0.0;
+            
+            this.buildPath();
+        }
+
+        buildPath() {
+            // Pontos aproximados baseados na imagem (linha vermelha). O cenário parece ter Z negativo 'para dentro' e X para lados.
+            const points = [
+                new THREE.Vector3(25, 0, 25),    // Começo (bolinha verde, canto inferior direito)
+                new THREE.Vector3(15, 0, 22),
+                new THREE.Vector3(5, 0, 20),
+                new THREE.Vector3(-10, 0, 18),
+                new THREE.Vector3(-18, 0, 10),   // Curva para cima na esquerda
+                new THREE.Vector3(-15, 0, 0),
+                new THREE.Vector3(-5, 0, -5),    // Curva para a direita no meio
+                new THREE.Vector3(8, 0, -8),
+                new THREE.Vector3(12, 0, -15),   // Curva para cima na direita
+                new THREE.Vector3(5, 0, -22),
+                new THREE.Vector3(-10, 0, -25),
+                new THREE.Vector3(-25, 0, -28)   // Fim (topo esquerdo)
+            ];
+            this.pathCurve = new THREE.CatmullRomCurve3(points);
+            
+            // Desenhar a linha vermelha para depuração via TubeGeometry
+            const outlineGeom = new THREE.TubeGeometry(this.pathCurve, 100, 0.3, 8, false);
+            const outlineMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+            this.pathMesh = new THREE.Mesh(outlineGeom, outlineMat);
+            // Elevar levemente para não ficar oculto no chão
+            this.pathMesh.position.y = 0.5; 
+            this.scene.add(this.pathMesh);
         }
 
         onResize() {
@@ -279,15 +309,11 @@
             const aspect = window.innerWidth / window.innerHeight;
             if (this.state === 'MENU' || this.state === 'LOADING') {
                 this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
-                // Mais um micro-ajuste final de câmera: z: -1.3, y: 0
                 this.camera.position.set(0, 0, -1.3); 
-                // Mantendo look at em 0.4 para ter uma inclinação mais nítida para cima
                 this.camera.lookAt(0, 0.4, 0);
             } else {
-                const zoom = 18;
-                this.camera = new THREE.OrthographicCamera(-zoom*aspect, zoom*aspect, zoom, -zoom, 0.1, 600);
-                this.camera.position.set(0, 10, 50);
-                this.camera.lookAt(0, 10, 0);
+                // Modo 2.5D muda para PerspectiveCamera para melhor percepção de profundidade
+                this.camera = new THREE.PerspectiveCamera(35, aspect, 0.1, 1000);
             }
         }
 
@@ -297,28 +323,28 @@
             setTimeout(() => document.getElementById('splash-screen').classList.add('hidden'), 1000);
 
             this.updateCameraProjection(); 
-            this.playerX = 0; this.playerY = 40;
-            this.playerGroup.position.set(0, 40, 0);
+            this.pathProgress = 0.0;
+            
+            const startPt = this.pathCurve.getPointAt(0);
+            this.playerY = 15; // Cai de cima
+            this.playerGroup.position.set(startPt.x, this.playerY, startPt.z);
 
-            await this.panCamera(0, 12, 1500);
+            // Ajusta câmera rapidamente para a posição inicial do percurso
+            const up = new THREE.Vector3(0, 1, 0);
+            const tangent = this.pathCurve.getTangentAt(0);
+            const offsetDir = new THREE.Vector3().crossVectors(tangent, up).normalize();
+            
+            // Distância lateral da câmera em relação à tangente da curva
+            const camPos = new THREE.Vector3().copy(startPt)
+                .addScaledVector(offsetDir, 18)
+                .add(new THREE.Vector3(0, 12, 0));
+                
+            this.camera.position.copy(camPos);
+            this.camera.lookAt(startPt);
+
+            // Pequeno delay dramático antes de dar o controle
+            await sleep(1500); 
             this.state = 'PLAYING';
-        }
-
-        panCamera(targetX, targetY, duration) {
-            return new Promise(resolve => {
-                const startX = this.camera.position.x;
-                const startY = this.camera.position.y;
-                const start = performance.now();
-                const tick = (now) => {
-                    const t = Math.min((now - start) / duration, 1);
-                    const ease = t<.5 ? 2*t*t : -1+(4-2*t)*t;
-                    this.camera.position.x = startX + (targetX - startX) * ease;
-                    this.camera.position.y = startY + (targetY - startY) * ease;
-                    this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
-                    if (t < 1) requestAnimationFrame(tick); else resolve();
-                };
-                requestAnimationFrame(tick);
-            });
         }
 
         updatePlaying(delta) {
@@ -326,22 +352,73 @@
             const right = this.keys['KeyD'] || this.keys['ArrowRight'];
             const jump = this.keys['Space'] || this.keys['KeyW'] || this.keys['ArrowUp'];
 
-            if (left) { this.vx = -MOVE_SPEED; this.facingRight = false; }
-            else if (right) { this.vx = MOVE_SPEED; this.facingRight = true; }
-            else { this.vx = 0; }
+            // 1. Mover na Curva
+            if (left) { 
+                this.pathProgress -= 0.08 * delta; 
+                this.facingRight = false; 
+            } else if (right) { 
+                this.pathProgress += 0.08 * delta; 
+                this.facingRight = true; 
+            }
 
+            this.pathProgress = THREE.MathUtils.clamp(this.pathProgress, 0, 1);
+            const curvePoint = this.pathCurve.getPointAt(this.pathProgress);
+            const tangent = this.pathCurve.getTangentAt(this.pathProgress);
+
+            // 2. Física e Pulo
             if (jump && this.onGround) { this.vy = JUMP_FORCE; this.onGround = false; }
-
             this.vy += GRAVITY;
-            this.playerX += this.vx;
             this.playerY += this.vy;
 
-            // Simple ground check
-            if (this.playerY < 0) { this.playerY = 0; this.vy = 0; this.onGround = true; }
+            // 3. Raycaster (Altura do Terreno)
+            let groundY = -5; // fallback caso pule fora do mapa
+            if (this.mapMesh) {
+                // Raios atirados de Y=100 direto pra baixo
+                const rayOrigin = new THREE.Vector3(curvePoint.x, 100, curvePoint.z);
+                const rayDir = new THREE.Vector3(0, -1, 0);
+                this.raycaster.set(rayOrigin, rayDir);
+                
+                // Intersectar a malha do mapa visível
+                const intersects = this.raycaster.intersectObject(this.mapMesh, true);
+                if (intersects.length > 0) {
+                    groundY = intersects[0].point.y;
+                }
+            }
 
-            this.playerGroup.position.set(this.playerX, this.playerY, 0);
-            this.camera.position.x += (this.playerX - this.camera.position.x) * 0.1;
-            this.camera.lookAt(this.camera.position.x, 10, 0);
+            if (this.playerY < groundY) { 
+                this.playerY = groundY; 
+                this.vy = 0; 
+                this.onGround = true; 
+            } else if (this.playerY > groundY + 0.1) {
+                this.onGround = false;
+            }
+
+            // 4. Update de Posição do Personagem
+            this.playerGroup.position.set(curvePoint.x, this.playerY, curvePoint.z);
+
+            // Orientar visualmente frente/costas
+            const lookPos = new THREE.Vector3().copy(this.playerGroup.position).add(tangent);
+            if (!this.facingRight) {
+                lookPos.copy(this.playerGroup.position).sub(tangent);
+            }
+            this.playerGroup.lookAt(lookPos);
+
+            // 5. Câmera de Acompanhamento (Tracking 2.5D)
+            const up = new THREE.Vector3(0, 1, 0);
+            // Produto vetorial entre a direção tangencial e UP cria um vetor apontando para o lado do caminho
+            const offsetDir = new THREE.Vector3().crossVectors(tangent, up).normalize();
+            
+            const camDist = 18;
+            const camHeight = 12;
+            
+            const targetCamPos = new THREE.Vector3().copy(this.playerGroup.position)
+                .addScaledVector(offsetDir, camDist)     // Põe de longe
+                .add(new THREE.Vector3(0, camHeight, 0)); // Levanta
+
+            // Lerp para suavizar o giro da câmera nas curvas
+            this.camera.position.lerp(targetCamPos, 0.08); 
+            // A câmera sempre olha para o jogador levemente para cima
+            this.camera.lookAt(this.playerGroup.position.x, this.playerGroup.position.y + 1.5, this.playerGroup.position.z);
         }
 
         loop() {
