@@ -12,6 +12,15 @@
     const PLAYER_W = 1.0;
     const PLAYER_H = 1.4;
 
+    // Sprite sheet: spritesCharacter.png (1456×770 px)
+    // Coordenadas originais exatas para focar apenas nos macacos (ignorando texto à esquerda)
+    const SPRITE_FRAMES = {
+        idle:    [[567, 538, 148, 222]],
+        walking: [[567,173,162,167],[729,173,162,167],[891,173,162,167],[1053,173,162,167]],
+        jump:    [[567,355,166,170],[733,355,166,170]],
+    };
+    const SPRITE_FPS = 8;
+
     // ─── HELPERS ───────────────────────────────────────────────────────────────
     function makeColor(hex) { return new THREE.Color(hex); }
 
@@ -98,139 +107,159 @@
             this.loadAssets();
             this.buildPlayer();
 
+            // Audio
+            this.setupAudio();
+
             // UI Events
             this.setupUIEvents();
 
-            // System Events
-            window.addEventListener('keydown', e => {
-                this.keys[e.code] = true;
-                // Atalho Secreto (Debug Mode)
-                if (e.ctrlKey && e.shiftKey && e.code === 'KeyE') {
+            // Resize
+            window.addEventListener('resize', () => {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.updateCameraProjection();
+            });
+
+            // Input
+            window.addEventListener('keydown', (e) => this.keys[e.code] = true);
+            window.addEventListener('keyup', (e) => this.keys[e.code] = false);
+
+            // Debug Toggle
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'KeyQ') {
                     this.debugMode = !this.debugMode;
-                    console.log("DEBUG MODE Toggled: ", this.debugMode);
-                    // Ocultar HUD se sair
-                    if (!this.debugMode) {
-                        const hud = document.getElementById('coord-hud');
-                        if (hud) hud.style.opacity = '0';
-                    } else {
-                        const hud = document.getElementById('coord-hud');
-                        if (hud) {
-                            hud.style.opacity = '1';
-                            hud.innerText = "Modo Debug ON: Voe com WASD. P=Criar Ponto, O=Copiar Rota";
-                        }
-                    }
-                }
-
-                // Ferramenta de Mapeamento de Caminho no Debug
-                if (this.debugMode && this.state === 'PLAYING') {
-                    if (e.code === 'KeyP') {
-                        const vx = parseFloat(this.playerGroup.position.x.toFixed(1));
-                        const vz = parseFloat(this.playerGroup.position.z.toFixed(1));
-
-                        if (!this.customPathPoints) {
-                            this.customPathPoints = [];
-                            this.customPathGroup = new THREE.Group();
-                            this.scene.add(this.customPathGroup);
-                        }
-
-                        this.customPathPoints.push(new THREE.Vector3(vx, 0, vz));
-
-                        // Dropar uma esfera amarela (waypoint)
-                        const geo = new THREE.SphereGeometry(1.5, 8, 8);
-                        const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
-                        const marker = new THREE.Mesh(geo, mat);
-                        marker.position.set(vx, this.playerGroup.position.y, vz);
-                        this.customPathGroup.add(marker);
-
-                        const hud = document.getElementById('coord-hud');
-                        if (hud) hud.innerText = `Ponto Adicionado: X:${vx} Z:${vz} (Total: ${this.customPathPoints.length})`;
-                        console.log(`Ponto gravado: new THREE.Vector3(${vx}, 0, ${vz})`);
-                    }
-
-                    if (e.code === 'KeyO') {
-                        if (!this.customPathPoints || this.customPathPoints.length === 0) {
-                            console.log("Nenhum ponto gravado ainda. Pressione P para gravar pontos.");
-                            return;
-                        }
-                        let txt = "const points = [\n";
-                        this.customPathPoints.forEach(p => {
-                            txt += `    new THREE.Vector3(${p.x}, 0, ${p.z}),\n`;
-                        });
-                        txt += "];";
-
-                        navigator.clipboard.writeText(txt).then(() => {
-                            console.log("CÓDIGO COPIADO!");
-                            console.log(txt);
-                            const hud = document.getElementById('coord-hud');
-                            if (hud) hud.innerText = `ROTA COPIADA PARA A ÁREA DE TRANSFERÊNCIA! (${this.customPathPoints.length} pontos)`;
-                        }).catch(err => {
-                            console.log("Erro ao copiar. Segue o código:\n" + txt);
-                        });
-                    }
+                    const hud = document.getElementById('coord-hud');
+                    if (hud) hud.style.display = this.debugMode ? 'block' : 'none';
+                    if (this.pathMesh) this.pathMesh.visible = this.debugMode;
                 }
             });
-            window.addEventListener('keyup', e => this.keys[e.code] = false);
-            window.addEventListener('resize', () => this.onResize());
 
             this.loop();
         }
 
         addLights(targetScene) {
-            // HemiLight com subtons mais claros e brilhantes (clarea a área de sombra na grama e troncos)
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 1.5);
             targetScene.add(hemiLight);
-
-            // Anteriormente a luz vinha de Z = 30 (costas da ilha), por isso a frente da floresta estava em sombra.
-            // Movemos para Z = -30 (costas da câmera), injetando luz perfeitamente em toda a parte da frente da floresta!
             const sun = new THREE.DirectionalLight(0xfffccf, 2.0);
             sun.position.set(20, 40, -30);
             sun.castShadow = true;
-            sun.shadow.normalBias = 0.05; // Evita artefatos escuros nas arestas
+            sun.shadow.normalBias = 0.05;
             targetScene.add(sun);
         }
 
+        // ─── AUDIO ─────────────────────────────────────────────────────────────────
+        setupAudio() {
+            this.musicVolume = 0.5;
+            this.sfxVolume   = 0.5;
+            this._walkPlaying = false;
+
+            this.audioMenu     = new Audio('music/musicMenu.mp3');
+            this.audioMenu.loop = true;
+            this.audioMenu.volume = 0;
+
+            this.audioGameplay     = new Audio('music/musicGameplay.mp3');
+            this.audioGameplay.loop = true;
+            this.audioGameplay.volume = 0;
+
+            this.sfxHover = new Audio('sfx/sfxHover.mp3');
+            this.sfxHover.volume = this.sfxVolume;
+
+            this.sfxWalk = new Audio('sfx/sfxWalk.mp3');
+            this.sfxWalk.loop = true;
+            this.sfxWalk.volume = this.sfxVolume;
+
+            // Tenta iniciar música de menu com fade in
+            const startMenu = () => {
+                if (this._menuMusicStarted) return;
+                this._menuMusicStarted = true;
+                this.audioMenu.play().then(() => this._fadeAudioIn(this.audioMenu, 2000)).catch(() => {});
+            };
+            // Autoplay imediato + fallback no primeiro clique/tecla
+            this.audioMenu.play().then(() => { this._menuMusicStarted = true; this._fadeAudioIn(this.audioMenu, 2000); }).catch(() => {});
+            document.addEventListener('click',   startMenu, { once: true });
+            document.addEventListener('keydown', startMenu, { once: true });
+        }
+
+        _fadeAudioIn(audio, duration) {
+            const target = this.musicVolume;
+            audio.volume = 0;
+            const steps = 40, stepTime = duration / steps;
+            let step = 0;
+            const id = setInterval(() => {
+                audio.volume = Math.min((++step / steps) * target, target);
+                if (step >= steps) clearInterval(id);
+            }, stepTime);
+        }
+
+        _fadeAudioOut(audio, duration, cb) {
+            const start = audio.volume, steps = 40, stepTime = duration / steps;
+            let step = 0;
+            const id = setInterval(() => {
+                audio.volume = Math.max(start * (1 - (++step / steps)), 0);
+                if (step >= steps) { clearInterval(id); audio.pause(); audio.currentTime = 0; if (cb) cb(); }
+            }, stepTime);
+        }
+
+        playSFXHover() {
+            try { this.sfxHover.currentTime = 0; this.sfxHover.volume = this.sfxVolume; this.sfxHover.play().catch(() => {}); } catch(e) {}
+        }
+
+        setWalkSound(active) {
+            if (active && !this._walkPlaying) {
+                this._walkPlaying = true;
+                this.sfxWalk.volume = this.sfxVolume;
+                this.sfxWalk.play().catch(() => {});
+            } else if (!active && this._walkPlaying) {
+                this._walkPlaying = false;
+                this.sfxWalk.pause();
+                this.sfxWalk.currentTime = 0;
+            }
+        }
+
         setupUIEvents() {
-            // Start Game
+            // Hover SFX em todos os botões
+            const addHover = (sel) => document.querySelectorAll(sel).forEach(el => el.addEventListener('mouseenter', () => this.playSFXHover()));
+            addHover('button, .menu-btn, .rebind-btn, #start-btn, #options-btn, #quit-btn, #back-to-menu');
+
             document.getElementById('start-btn').addEventListener('click', () => {
                 if (this.state === 'MENU') this.runCutscene();
             });
 
-            // Options Toggle
             const optionsMenu = document.getElementById('options-menu');
-            document.getElementById('options-btn').addEventListener('click', () => {
-                optionsMenu.classList.add('active');
-            });
-            document.getElementById('back-to-menu').addEventListener('click', () => {
-                optionsMenu.classList.remove('active');
-            });
+            document.getElementById('options-btn').addEventListener('click', () => optionsMenu.classList.add('active'));
+            document.getElementById('back-to-menu').addEventListener('click', () => optionsMenu.classList.remove('active'));
 
-            // Volume Sliders
             const musicSlider = document.getElementById('music-slider');
-            const sfxSlider = document.getElementById('sfx-slider');
-            const musicPct = document.getElementById('music-vol-percent');
-            const sfxPct = document.getElementById('sfx-vol-percent');
+            const sfxSlider   = document.getElementById('sfx-slider');
+            const musicPct    = document.getElementById('music-vol-percent');
+            const sfxPct      = document.getElementById('sfx-vol-percent');
 
-            musicSlider.addEventListener('input', (e) => musicPct.innerText = `${e.target.value}%`);
-            sfxSlider.addEventListener('input', (e) => sfxPct.innerText = `${e.target.value}%`);
+            musicSlider.addEventListener('input', (e) => {
+                this.musicVolume = e.target.value / 100;
+                musicPct.innerText = `${e.target.value}%`;
+                if (this.audioMenu     && !this.audioMenu.paused)     this.audioMenu.volume     = this.musicVolume;
+                if (this.audioGameplay && !this.audioGameplay.paused) this.audioGameplay.volume = this.musicVolume;
+            });
+            sfxSlider.addEventListener('input', (e) => {
+                this.sfxVolume = e.target.value / 100;
+                sfxPct.innerText = `${e.target.value}%`;
+                if (this.sfxHover) this.sfxHover.volume = this.sfxVolume;
+                if (this.sfxWalk)  this.sfxWalk.volume  = this.sfxVolume;
+            });
 
-            // Rebind mock logic
             document.querySelectorAll('.rebind-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const originalText = btn.innerText;
-                    btn.innerText = "PRESS ANY KEY...";
-                    btn.style.color = "#FFBF00";
-
+                    btn.innerText = 'PRESS ANY KEY...';
+                    btn.style.color = '#FFBF00';
                     const handleOnce = (e) => {
-                        e.preventDefault(); // Impede o scroll de página caso a barra resolva scrollar
+                        e.preventDefault();
                         btn.innerText = e.code === 'Space' ? 'SPACE' : e.key.toUpperCase();
-                        btn.style.color = "#fff";
+                        btn.style.color = '#fff';
                         window.removeEventListener('keydown', handleOnce);
                     };
                     window.addEventListener('keydown', handleOnce);
                 });
             });
 
-            // Quit
             document.getElementById('quit-btn').addEventListener('click', () => {
                 document.getElementById('quit-overlay').classList.add('active');
             });
@@ -242,58 +271,93 @@
 
             const checkDone = () => {
                 this.assetsLoaded++;
-                console.log(`Asset ${this.assetsLoaded}/${this.totalAssets} handled.`);
                 if (this.assetsLoaded >= this.totalAssets) {
                     this.state = 'MENU';
-                    console.log("Game state set to MENU");
                     setTimeout(() => {
                         const loadingElem = document.getElementById('menu-loading');
                         if (loadingElem) loadingElem.classList.add('hidden');
                     }, 500);
+
+                    // Inicia a música de menu mesmo sem o fade (autoplay policy)
+                    if (!this._menuMusicStarted) {
+                        this.audioMenu.play().then(() => this._fadeAudioIn(this.audioMenu, 2000)).catch(() => {});
+                        this._menuMusicStarted = true;
+                    }
+
+                    // Configura a câmera circular para rodar no MenuScene
+                    this.menuCameraAngle = 0;
+                    const box = new THREE.Box3().setFromObject(this.menuMesh);
+                    this.menuCenter = box.getCenter(new THREE.Vector3());
+                    this.cameraRadius = 35; // Distância da ilha
                 }
             };
 
-            // Error handler to ensure we don't get stuck in LOADING
-            const onError = (err) => {
-                console.warn('Asset loading failed (likely CORS or file not found):', err);
+            const onError = (e) => console.error("Error loading models", e);
 
-                // FALLBACK: Se o modelo falhar, restauramos a imagem de fundo estática
-                const splash = document.getElementById('splash-screen');
-                if (splash) {
-                    splash.style.background = "url('assets/fundo.png') no-repeat center center";
-                    splash.style.backgroundSize = "cover";
+            // Shaders de Vento - Aplica movimento nos vértices das folhas
+            const leafVertexShader = `
+                uniform float time;
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    vec3 pos = position;
+                    // Apenas balança pontos superiores (evita desconexão da árvore)
+                    if (pos.y > 0.0) {
+                        float speed = 1.0;
+                        float disp = sin(time * speed + pos.x * 2.0) * 0.15;
+                        pos.x += disp; // Balança no eixo X (suavemente)
+                    }
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
                 }
+            `;
 
-                checkDone();
-            };
+            const leafFragmentShader = `
+                uniform sampler2D map;
+                varying vec2 vUv;
+                // Cores para mistura: topo das folhas brilhantes, base escura
+                void main() {
+                    vec4 texColor = texture2D(map, vUv);
+                    if (texColor.a < 0.5) discard; // Aplica transparência cortando folhas
+
+                    // Simula iluminação no shader para combinar os tons
+                    vec3 colorTop   = vec3(0.66, 0.81, 0.38); // Verde limão escuro / musgo
+                    vec3 colorBot   = vec3(0.33, 0.45, 0.18); // Verde pinheiro (muito escuro)
+                    vec3 mixedColor = mix(colorBot, colorTop, vUv.y);
+
+                    // Multiplica a textura pela cor mista
+                    gl_FragColor = vec4(texColor.rgb * mixedColor, texColor.a);
+                }
+            `;
 
             // Load Menu Model
             loader.load('models/modelMenu.glb', (gltf) => {
                 this.menuMesh = gltf.scene;
-                this.menuMesh.traverse(child => {
+
+                // Aplicar shader nas folhas para vento
+                this.menuMesh.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
 
-                        // Efeito de Vento: Injeção de Shader Customizado (Vertex Shader)
-                        if (child.material) {
+                        // Se tiver textura/mapa, vamos processar caso seja follhagem (ajuste conforme nome dos materiais no .glb)
+                        // Como os materiais padrões do Three.js ignoram o shader puro a menos que seja um ShaderMaterial,
+                        // para as folhas (geralmente materiais com transparência ou chamados 'Leaves' / 'Foliage')
+                        if (child.material && (child.material.name.toLowerCase().includes('leaf') || child.material.transparent || child.material.alphaTest > 0)) {
+                            // Convertendo para o material base (MeshStandardMaterial modificado via onBeforeCompile)
                             child.material.onBeforeCompile = (shader) => {
                                 shader.uniforms.time = this.timeUniform;
-                                shader.vertexShader = `uniform float time;\n` + shader.vertexShader;
-                                shader.vertexShader = shader.vertexShader.replace(
+                                shader.vertexShader = `
+                                    uniform float time;
+                                    ${shader.vertexShader}
+                                `.replace(
                                     `#include <begin_vertex>`,
                                     `
-                                    #include <begin_vertex>
-                                    // Como a vegetação está muito próxima do Y=0, não podemos zerar a força na base.
-                                    // Incrementamos um valor constante (offset) para assegurar que toda a superfície ondule.
-                                    float heightFactor = position.y + 2.0; 
-                                    float windForce = 0.008 * heightFactor; // Força do vento
-                                    
-                                    // Ampliamos muito o tamanho da "onda" reduzindo a frequência cruzada (0.05 em vez de 1.2).
-                                    // Isso assegura que uma flor inteira sofra a mesma força, evitando que ela
-                                    // estique e "derreta/mescle" com as folhas vizinhas. As coisas balançam como blocos sólidos.
-                                    transformed.x += sin(time * 1.5 + position.z * 0.05) * windForce;
-                                    transformed.z += cos(time * 1.0 + position.x * 0.05) * windForce * 0.4;
+                                    vec3 transformed = vec3(position);
+                                    // Adiciona inclinação baseada em y (apenas topos balançam)
+                                    // Fator de escala da árvore afeta o displacement
+                                    float windStr = max(0.0, transformed.y * 0.1);
+                                    transformed.x += sin(time * 1.5 + transformed.z) * 0.4 * windStr;
+                                    transformed.z += cos(time * 1.2 + transformed.x) * 0.2 * windStr;
                                     `
                                 );
                             };
@@ -328,19 +392,97 @@
         // ... existing player and other methods adjusted ...
         buildPlayer() {
             this.playerGroup = new THREE.Group();
-            const mat = new THREE.MeshStandardMaterial({ color: 0xf9a825, flatShading: true });
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.6), mat);
-            body.position.y = 0.5;
-            this.playerGroup.add(body);
             this.playerGroup.position.set(-999, 0, 0);
             this.scene.add(this.playerGroup);
+
+            // Estado da animação de sprite
+            this.spriteState  = 'idle';
+            this.spriteFrame  = 0;
+            this.spriteTimer  = 0;
+            this.spriteTextures = null;
+            this.spriteMesh   = null;
+            this.spriteMat    = null;
+
+            // Carrega sprite sheet e extrai frames
+            const img = new Image();
+            img.onload = () => this._buildSpriteTextures(img);
+            img.src = 'sprites/spritesCharacter.png';
 
             this.playerY = 2; this.vy = 0;
             this.onGround = false; this.facingRight = true;
             this.pathProgress = 0.0;
-            this.smoothedGroundY = 0; // Altura suavizada do chão para evitar oscilação
+            this.smoothedGroundY = 0;
 
             this.buildPath();
+        }
+
+        _buildSpriteTextures(img) {
+            this.spriteTextures = {};
+            for (const [anim, frames] of Object.entries(SPRITE_FRAMES)) {
+                this.spriteTextures[anim] = frames.map(([sx, sy, sw, sh]) => {
+                    const cv  = document.createElement('canvas');
+                    cv.width  = sw; cv.height = sh;
+                    const ctx = cv.getContext('2d');
+                    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+                    // Chromakey: Apenas apaga a cor cinza escuro de fundo da imagem diretamente
+                    const id = ctx.getImageData(0, 0, sw, sh), d = id.data;
+                    for (let i = 0; i < d.length; i += 4) {
+                        const r = d[i], g = d[i+1], b = d[i+2];
+                        if (r > 50 && r < 130 && g > 50 && g < 130 && b > 50 && b < 130
+                            && Math.abs(r-g) < 30 && Math.abs(g-b) < 30) {
+                            d[i+3] = 0; // Transparente
+                        } else if (r > 215 && g > 215 && b > 215) {
+                            d[i+3] = 0; // Branco vira transparente
+                        }
+                    }
+                    ctx.putImageData(id, 0, 0);
+
+                    const tex = new THREE.CanvasTexture(cv);
+                    tex.magFilter = THREE.LinearFilter;
+                    tex.minFilter = THREE.LinearFilter;
+                    return tex;
+                });
+            }
+            // Plano billboard normalizado e ampliado para acomodar 250x250
+            const planeGeo = new THREE.PlaneGeometry(3.5, 3.5);
+            this.spriteMat = new THREE.MeshBasicMaterial({
+                map: this.spriteTextures.idle[0],
+                transparent: true, side: THREE.DoubleSide,
+                depthWrite: false, alphaTest: 0.05,
+            });
+            this.spriteMesh = new THREE.Mesh(planeGeo, this.spriteMat);
+            this.spriteMesh.position.y = 1.75; // Eleva acima do chão (metade de 3.5)
+            this.playerGroup.add(this.spriteMesh);
+        }
+
+        updateSpriteAnimation(state, delta) {
+            if (!this.spriteTextures || !this.spriteMesh) return;
+            if (state !== this.spriteState) {
+                this.spriteState = state;
+                this.spriteFrame = 0;
+                this.spriteTimer = 0;
+            }
+            const frames = this.spriteTextures[this.spriteState] || this.spriteTextures.idle;
+            this.spriteTimer += delta;
+            if (this.spriteTimer > 1 / SPRITE_FPS) {
+                this.spriteTimer = 0;
+                this.spriteFrame = (this.spriteFrame + 1) % frames.length;
+            }
+            this.spriteMat.map = frames[this.spriteFrame];
+            this.spriteMat.needsUpdate = true;
+            
+            // Cylindrical Billboarding: olhar para a câmera, mas sem deitar (Pitch = 0, Roll = 0)
+            // Isso garante que o sprite fique em pé "em cima do solo" como um personagem 3D.
+            if (this.camera) {
+                const camPos = this.camera.position.clone();
+                // Assumindo que o playerGroup não tem rotação (XYZ = 0,0,0)
+                camPos.y = this.playerGroup.position.y + this.spriteMesh.position.y;
+                this.playerGroup.worldToLocal(camPos);
+                this.spriteMesh.lookAt(camPos);
+            }
+            // Espelhar quando vai para a esquerda
+            this.spriteMesh.scale.x = this.facingRight ? 1 : -1;
         }
 
         buildPath() {
@@ -478,7 +620,7 @@
                 this.camera.position.set(startPt.x, 80, startPt.z + 50);
                 this.camera.lookAt(startPt);
             } else {
-                // Modo 2.5D Real - Câmera Direcional Fixa
+                // Modo 2.5D Real
                 this.playerY = 15;
                 this.playerGroup.position.set(startPt.x, this.playerY, startPt.z);
 
@@ -494,8 +636,13 @@
                 this.camera.lookAt(startPt);
             }
 
-            // Pequeno delay dramático antes de dar o controle
             await sleep(1500);
+
+            // Transição musical: fade out menu → fade in gameplay
+            this._fadeAudioOut(this.audioMenu, 1500, () => {
+                this.audioGameplay.play().then(() => this._fadeAudioIn(this.audioGameplay, 2000)).catch(() => {});
+            });
+
             this.state = 'PLAYING';
         }
 
@@ -556,61 +703,47 @@
                 this.camera.lookAt(this.playerGroup.position);
 
             } else {
-                // MODO 2.5D ORIGINAL (Câmera Trilho)
-                if (left) {
-                    this.pathProgress -= 0.035 * delta; // Velocidade reduzida
-                    this.facingRight = false;
-                } else if (right) {
-                    this.pathProgress += 0.035 * delta; // Velocidade reduzida
-                    this.facingRight = true;
-                }
+                // MODO 2.5D ORIGINAL
+                const isMoving = left || right;
+                if (left)  { this.pathProgress -= 0.035 * delta; this.facingRight = false; }
+                else if (right) { this.pathProgress += 0.035 * delta; this.facingRight = true; }
 
                 this.pathProgress = THREE.MathUtils.clamp(this.pathProgress, 0, 1);
                 const curvePoint = this.pathCurve.getPointAt(this.pathProgress);
-                const tangent = this.pathCurve.getTangentAt(this.pathProgress);
+                const tangent    = this.pathCurve.getTangentAt(this.pathProgress);
 
+                // Física
                 if (jump && this.onGround) { this.vy = JUMP_FORCE; this.onGround = false; }
                 this.vy += GRAVITY;
                 this.playerY += this.vy;
 
-                let groundY = -5;
+                // Raycaster com suavização para eliminar solavancos do low-poly
                 if (this.mapMesh) {
                     const rayOrigin = new THREE.Vector3(curvePoint.x, 200, curvePoint.z);
-                    const rayDir = new THREE.Vector3(0, -1, 0);
-                    this.raycaster.set(rayOrigin, rayDir);
-                    const intersects = this.raycaster.intersectObject(this.mapMesh, true);
-                    if (intersects.length > 0) {
-                        groundY = intersects.reduce((lowest, hit) =>
-                            hit.point.y < lowest ? hit.point.y : lowest,
-                            intersects[0].point.y
-                        );
-                        groundY += 1.0; // Offset para ficar acima do solo
+                    this.raycaster.set(rayOrigin, new THREE.Vector3(0, -1, 0));
+                    const hits = this.raycaster.intersectObject(this.mapMesh, true);
+                    if (hits.length > 0) {
+                        const rawY = hits.reduce((lo, h) => h.point.y < lo ? h.point.y : lo, hits[0].point.y);
+                        this.smoothedGroundY = THREE.MathUtils.lerp(this.smoothedGroundY, rawY + 1.5, 0.06);
                     }
                 }
-
-                // Suavização forte: o chão "efetivo" muda muito devagar,
-                // eliminando os solavancos do terreno low-poly.
-                this.smoothedGroundY = THREE.MathUtils.lerp(this.smoothedGroundY, groundY, 0.03);
-
-                if (this.playerY < this.smoothedGroundY) {
-                    this.playerY = this.smoothedGroundY;
-                    this.vy = 0;
-                    this.onGround = true;
-                } else if (this.playerY > this.smoothedGroundY + 0.1) {
-                    this.onGround = false;
-                }
+                const groundY = this.smoothedGroundY;
+                if (this.playerY < groundY) { this.playerY = groundY; this.vy = 0; this.onGround = true; }
+                else if (this.playerY > groundY + 0.1) { this.onGround = false; }
 
                 this.playerGroup.position.set(curvePoint.x, this.playerY, curvePoint.z);
 
-                // O personagem continua olhando para frente na tangente do caminho
-                const lookPos = new THREE.Vector3().copy(this.playerGroup.position).add(tangent);
-                if (!this.facingRight) lookPos.copy(this.playerGroup.position).sub(tangent);
-                this.playerGroup.lookAt(lookPos);
+                // Animação do sprite
+                const sprState = !this.onGround ? 'jump' : isMoving ? 'walking' : 'idle';
+                this.updateSpriteAnimation(sprState, delta);
 
+                // Som de passos
+                this.setWalkSound(isMoving && this.onGround);
+
+                // Câmera
                 const up = new THREE.Vector3(0, 1, 0);
                 const offsetDir = new THREE.Vector3().crossVectors(tangent, up).normalize();
-                const camDist = 18;
-                const camHeight = 12;
+                const camDist = 18, camHeight = 12;
                 const targetCamPos = new THREE.Vector3().copy(this.playerGroup.position)
                     .addScaledVector(offsetDir, camDist)
                     .add(new THREE.Vector3(0, camHeight, 0));
