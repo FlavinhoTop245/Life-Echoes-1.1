@@ -42,11 +42,11 @@
                         <div class="options-column">
                             <div class="option-item">
                                 <span class="option-label">Move Forward</span>
-                                <button class="rebind-btn" id="bind-forward">W / UP</button>
+                                <button class="rebind-btn" id="bind-forward">D</button>
                             </div>
                             <div class="option-item">
                                 <span class="option-label">Move Backward</span>
-                                <button class="rebind-btn" id="bind-backward">S / DOWN</button>
+                                <button class="rebind-btn" id="bind-backward">A</button>
                             </div>
                         </div>
                         <div class="options-column">
@@ -86,6 +86,11 @@
         <!-- Narrative bar -->
         <div id="narrative-bar">
             <p id="narrative-text"></p>
+        </div>
+
+        <!-- Coordinates HUD (Debug) -->
+        <div id="coord-hud" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px 15px; font-family: monospace; font-size: 1.2rem; border: 1px solid #0f0; border-radius: 8px; z-index: 1000; pointer-events: none; opacity: 0;">
+            X: 0.00 | Z: 0.00
         </div>
 
         <!-- Quit Overlay -->

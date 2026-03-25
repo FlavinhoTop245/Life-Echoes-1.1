@@ -38,6 +38,21 @@ Devido às restrições de segurança do navegador (CORS) para módulos JavaScri
 
 ## 📜 Log de Modificações (Patches)
 
+### [Patch 1.37.0] - Março de 2026
+- **Correção Crítica de Raycasting (Anti-Subida em Árvores)**: Solucionado o bug em que o personagem subia em árvores, arbustos e pedras ao invés de permanecer no chão. O `THREE.Raycaster` disparado de cima para baixo retornava como "chão" o primeiro objeto interceptado — que muitas vezes era o topo da copa das árvores. A lógica foi alterada para percorrer **todas as intersecções** e selecionar aquela com o **menor valor de Y** (ponto mais baixo), que corresponde ao solo real do terreno.
+
+### [Patch 1.36.0] - Março de 2026
+- **Recalibração de Caminho (2ª análise do vídeo)**: Os pontos da `CatmullRomCurve3` foram completamente reescritos com base em uma segunda análise frame-a-frame do arquivo `assets/caminho.mp4`. O eixo Z foi corrigido (valores positivos ao sul, negativos ao norte). O caminho agora possui 24 waypoints extraídos diretamente do HUD de coordenadas, seguindo estritamente as estradas de terra.
+
+### [Patch 1.35.0] - Março de 2026
+- **Sistema Debug (Ctrl+Shift+E)**: Implementado modo de exploração livre com câmera aérea ativável durante o jogo com o atalho `Ctrl+Shift+E`. No modo debug, o personagem pode voar pelo mapa com W/A/S/D (com colisão de chão via Raycaster). Um painel HUD verde no canto superior direito exibe as coordenadas `X` e `Z` em tempo real, permitindo o mapeamento preciso das estradas de terra para calibração da trilha.
+
+### [Patch 1.34.0] - Março de 2026
+- **Implementação do Sistema 2.5D (Spline + Câmera de Trilho)**: O jogo agora usa um sistema de câmera 2.5D tipo "Crash Bandicoot / Donkey Kong Country". O personagem avança/retrocede ao longo de uma curva `CatmullRomCurve3`. A câmera fica posicionada perpendicularmente à tangente da curva e gira suavemente conforme o caminho faz curvas. A altura do personagem é calculada em tempo real por Raycasting (`Y = 200` direto para baixo), garantindo que ele siga o relevo do terreno.
+
+### [Patch 1.33.0] - Março de 2026
+- **Mapa Jogável (Câmera Ortográfica → Perspectiva)**: A câmera de gameplay foi alterada de `OrthographicCamera` para `PerspectiveCamera` (FOV 35°) para melhor percepção de profundidade no mapa 3D. O `modelMap.glb` foi integrado como cenário de gameplay (além do menu). Os controles foram desconectados dos eixos livres e vinculados ao progresso `u ∈ [0,1]` na curva.
+
 ### [Patch 1.32.0] - Março de 2026
 - **Layout Shift Prevention (Anti-Teleporte de Textos)**: Corrigido o famoso problema de "Flash of Unstyled Text" (FOUT). Durante o milissegundo de carregamento da fonte customizada (`Almendra`), o navegador renderizava o título com uma fonte padrão de dimensões menores, e, ao concluir o download, atualizava para o tamanho real. Como o contêiner era centrado verticalmente (`align-items: center`), esse recálculo de altura das letras forçava toda a caixa a pular de cima para baixo de uma vez só. Adicionado `font-display: block;` nos `@font-face` do CSS, bloqueando qualquer renderização da aba do menu até que o modelo matemátio da fonte original esteja 100% lido, garantindo que o texto já nasça instantaneamente no "lugar esperado ao mesmo tempo".
 
