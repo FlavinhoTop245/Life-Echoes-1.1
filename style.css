@@ -483,9 +483,84 @@ h1.menu-title {
 }
 
 /* Modificado para transição suave sem remover o elemento do fluxo (evita saltos no menu) */
+/* ─── HUNTER MINIGAME UI ─── */
+#minigame-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    height: 300px;
+    z-index: 1000;
+    display: none; /* Ativado via JS */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    border: 3px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+}
+
+#minigame-dial {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    background: #111;
+    border: 8px solid #333;
+    border-radius: 50%;
+    overflow: hidden;
+}
+
+#minigame-sector {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    /* Criado via conic-gradient no JS para flexibilidade */
+    background: conic-gradient(transparent 0deg, #fff 0deg 60deg, transparent 60deg);
+}
+
+#minigame-needle {
+    position: absolute;
+    top: 0; left: 50%;
+    width: 6px;
+    height: 50%;
+    background: #ff0000;
+    transform-origin: bottom center;
+    box-shadow: 0 0 15px #ff0000;
+    z-index: 10;
+}
+
+#minigame-counter {
+    margin-top: 20px;
+    display: flex;
+    gap: 15px;
+}
+
+.counter-dot {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    transition: background 0.3s;
+}
+
+.counter-dot.hit {
+    background: #6de2a2;
+    box-shadow: 0 0 15px #6de2a2;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translate(-50%, -50%); }
+    25% { transform: translate(-52%, -48%); }
+    75% { transform: translate(-48%, -52%); }
+}
+
+.shake {
+    animation: shake 0.1s infinite;
+}
+
 .hidden {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    transition: opacity 0.5s ease;
+    display: none !important;
 }

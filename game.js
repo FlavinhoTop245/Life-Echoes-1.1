@@ -6,9 +6,11 @@
 
     // ─── CONSTANTS ─────────────────────────────────────────────────────────────
     const GRAVITY = -0.022;
-    const JUMP_FORCE = 0.55;
-    const MOVE_SPEED = 0.28;
+    const JUMP_FORCE = 0.5;
+    const MOVE_SPEED = 0.18; // Reduzida ainda mais para controle
     const FRUITS_NEEDED = 8;
+    const HUNTER_CHASE_START = 0.3; 
+    const MINIGAME_START_POS = 0.85; 
     const PLAYER_W = 1.0;
     const PLAYER_H = 1.4;
 
@@ -61,54 +63,212 @@
         return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 
+    // ─── HUNTER CLASS ────────────────────────────────────────────────────────────
+    class Hunter {
+        constructor(scene, pathCurve) {
+            this.scene = scene;
+            this.pathCurve = pathCurve;
+            this.group = new THREE.Group();
+            this.scene.add(this.group);
+            
+            this.progress = 0;
+            this.state = 'idle'; // idle | walking | chasing | minigame | fainted
+            this.facingRight = true;
+            this.groundY = 0;
+
+            this.spriteTextures = { walking: [], idle: [], jump: [], faint: [] };
+            this.spriteFrame = 0;
+            this.spriteTimer = 0;
+            this.loadAssets();
+        }
+
+        async loadAssets() {
+            const loader = new THREE.TextureLoader();
+            const process = (path) => new Promise(res => {
+                loader.load(path, tex => {
+                    const padding = 15;
+                    const cv = document.createElement('canvas');
+                    cv.width = tex.image.width + padding*2; cv.height = tex.image.height + padding*2;
+                    const ctx = cv.getContext('2d');
+                    ctx.drawImage(tex.image, padding, padding);
+                    
+                    // Chromakey Agressivo: Alvo é o fundo azulado/acinzentado dos sprites do Hunter
+                    const id = ctx.getImageData(0,0,cv.width,cv.height), d = id.data;
+                    for(let i=0; i<d.length; i+=4) {
+                        const r=d[i], g=d[i+1], b=d[i+2];
+                        
+                        // Detecta o fundo azul claro/acinzentado (o retângulo em volta do caçador)
+                        // Cores típicas: r: 170-210, g: 190-230, b: 200-250 (ou azul ciano r:80... g:180... b:230...)
+                        const isBlueish = (b > r && b > g && b > 100);
+                        const isGreyish = (Math.abs(r-g)<25 && Math.abs(g-b)<25 && r > 150);
+                        const isWhiteish = (r > 220 && g > 220 && b > 220);
+
+                        if (isBlueish || isGreyish || isWhiteish) {
+                            d[i+3] = 0;
+                        }
+                    }
+                    ctx.putImageData(id,0,0);
+
+                    // Contorno Preto Fino e Limpo
+                    const sprClean = document.createElement('canvas');
+                    sprClean.width = cv.width; sprClean.height = cv.height;
+                    sprClean.getContext('2d').putImageData(id, 0, 0);
+                    
+                    ctx.clearRect(0,0,cv.width,cv.height);
+                    const thickness = 4;
+                    ctx.globalCompositeOperation = 'source-over';
+                    // Desenha o contorno apenas onde existe opacidade na imagem original
+                    for(let x = -thickness; x <= thickness; x++) {
+                        for(let y = -thickness; y <= thickness; y++) {
+                            if (x*x + y*y > thickness*thickness) continue;
+                            ctx.drawImage(sprClean, x, y);
+                        }
+                    }
+                    ctx.globalCompositeOperation = 'source-in'; ctx.fillStyle = 'black'; ctx.fillRect(0,0,cv.width,cv.height);
+                    ctx.globalCompositeOperation = 'source-over'; ctx.drawImage(sprClean, 0,0);
+
+                    const cleanTex = new THREE.CanvasTexture(cv);
+                    cleanTex.magFilter = cleanTex.minFilter = THREE.LinearFilter;
+                    res(cleanTex);
+                });
+            });
+
+            const walks = ['sprites/hunter/spriteWalking1.png', 'sprites/hunter/spriteWalking2.png', 'sprites/hunter/spriteWalking3.png'];
+            const results = await Promise.all([
+                ...walks.map(p => process(p)),
+                process('sprites/hunter/spriteIdle.png'),
+                process('sprites/hunter/spriteJump.png'),
+                process('sprites/hunter/spriteFaint.png')
+            ]);
+
+            this.spriteTextures.walking = results.slice(0, 3);
+            this.spriteTextures.idle = [results[3]];
+            this.spriteTextures.jump = [results[4]];
+            this.spriteTextures.fainted = [results[5]];
+
+            const geo = new THREE.PlaneGeometry(3.8, 3.8);
+            this.mat = new THREE.MeshBasicMaterial({ map: results[3], transparent: true, alphaTest: 0.1 });
+            this.mesh = new THREE.Mesh(geo, this.mat);
+            this.mesh.position.y = 1.9;
+            this.group.add(this.mesh);
+            this.group.renderOrder = 998;
+        }
+
+        update(playerProgress, delta, camera) {
+            if (!this.mesh) return;
+
+            // Se o player ainda não chegou nos 30%, o hunter fica "escondido" no início do caminho
+            if (playerProgress < HUNTER_CHASE_START && this.state !== 'fainted') {
+                this.group.visible = false;
+                this.progress = 0;
+                return;
+            }
+            this.group.visible = true;
+
+            if (this.state !== 'fainted') {
+                if (playerProgress >= HUNTER_CHASE_START && playerProgress < MINIGAME_START_POS) {
+                    this.state = 'walking';
+                    // Caçador tenta alcançar o player com uma velocidade constante levemente menor que a do player em linha reta,
+                    // mas ele não para se o player parar.
+                    const hunterSpeed = 0.02 * delta; 
+                    this.progress += hunterSpeed;
+                } else if (playerProgress >= MINIGAME_START_POS) {
+                    this.state = 'minigame';
+                    // No minigame ele se aproxima. A velocidade será controlada pelo Game (minigameHunterSpeed)
+                } else {
+                    this.state = 'idle';
+                }
+            }
+
+            // Garante que o hunter não ultrapasse o fim do caminho antes do mico
+            this.progress = Math.min(this.progress, playerProgress + 0.01);
+
+            const pos = this.pathCurve.getPointAt(this.progress);
+            this.group.position.set(pos.x, this.groundY, pos.z);
+
+            this.spriteTimer += delta;
+            if (this.spriteTimer > 1/8) {
+                this.spriteTimer = 0;
+                const isWalking = (this.state === 'minigame' || this.state === 'walking');
+                const animKey = isWalking ? 'walking' : this.state;
+                const frames = this.spriteTextures[animKey] || this.spriteTextures.idle;
+                if (frames.length > 0) {
+                    this.spriteFrame = (this.spriteFrame + 1) % frames.length;
+                    this.mat.map = frames[this.spriteFrame];
+                    this.mat.needsUpdate = true;
+                }
+            }
+
+            if (camera) {
+                this.mesh.quaternion.copy(camera.quaternion);
+                const e = new THREE.Euler().setFromQuaternion(this.mesh.quaternion, 'YXZ');
+                e.x = 0; e.z = 0;
+                this.mesh.quaternion.setFromEuler(e);
+            }
+            this.mesh.scale.x = (playerProgress >= this.progress) ? 1 : -1;
+        }
+    }
+
     // ─── GAME CLASS ────────────────────────────────────────────────────────────
     class Game {
         constructor() {
+            // Singleton Guard: Se já houver uma instância rodando, paramos o loop dela
+            if (window._activeGame) {
+                window._activeGame.state = 'STOPPED';
+                if (window._activeGame.renderer) {
+                    window._activeGame.renderer.dispose();
+                }
+            }
+            window._activeGame = this;
+
             this.canvas = document.getElementById('game-canvas');
             this.clock = new THREE.Clock();
-            this.state = 'LOADING'; // LOADING | MENU | CUTSCENE | PLAYING
+            this.state = 'LOADING'; 
+
+            // Minigame State
+            this.minigameActive = false;
+            this.minigameHits = 0;
+            this.minigameAngle = 0;
+            this.minigameSpeed = 4;
+            this.minigameHunterSpeed = 0.005; 
+            this.successZone = { start: 0, end: 60 };
+            this.hunterDefeated = false;
 
             this.mapMesh = null;
             this.menuMesh = null;
             this.assetsLoaded = 0;
-            this.totalAssets = 2; // modelMap and modelMenu
+            this.totalAssets = 2; 
 
             this.raycaster = new THREE.Raycaster();
             this.keys = {};
-            this.timeUniform = { value: 0 }; // Uniform de tempo para o Shader de vento
+            this.timeUniform = { value: 0 }; 
 
             this.init();
         }
 
         init() {
-            this.debugMode = false; // Add this line
+            this.debugMode = false;
 
             // Scenes
             this.scene = new THREE.Scene();
             this.menuScene = new THREE.Scene();
-
             this.scene.background = makeColor(0x87ceeb);
-            // Céu azul e ensolarado para o Menu
             this.menuScene.background = makeColor(0x5caede);
 
-            // Renderer com proteção de Contexto
-            try {
-                this.renderer = new THREE.WebGLRenderer({ 
-                    canvas: this.canvas, 
-                    antialias: true,
-                    powerPreference: "high-performance",
-                    failIfMajorPerformanceCaveat: true // Evita carregar se o hardware estiver travando
-                });
-            } catch (e) {
-                console.warn("Erro ao criar WebGL. Tentando modo de baixa performance...");
-                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false });
-            }
-
+            // Gerenciamento de Renderer (Anti-Memory Leak)
+            this.renderer = new THREE.WebGLRenderer({ 
+                canvas: this.canvas, 
+                antialias: true,
+                powerPreference: "high-performance",
+                precision: "mediump",
+                stencil: false, // Otimização para economizar memória
+                depth: true
+            });
+            
             this.renderer.setSize(window.innerWidth, window.innerHeight);
-            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Limite de 1.5 para salvar GPU
             this.renderer.shadowMap.enabled = true;
             this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
             this.renderer.toneMappingExposure = 1.6;
 
@@ -120,40 +280,41 @@
             this.setupAudio();
             this.setupUIEvents();
 
-            // Garantir cursor visível
             document.documentElement.style.cursor = 'default';
             document.body.style.cursor = 'default';
 
-            // AUTO-START Intro Visual (sem áudio por causa de bloqueios)
+            // AUTO-START Intro
             document.getElementById('intro-ggj').classList.add('active'); 
             this.runIntro();
 
-            // Áudio só inicia na interação (obrigatório pelo navegador)
+            // Áudio Unlock
             const unlockAudio = () => {
-                if (!this._menuMusicStarted && this.state === 'MENU') {
+                if (this.state === 'MENU' && !this._menuMusicStarted) {
                     this._menuMusicStarted = true;
                     this.audioMenu.play().then(() => this._fadeAudioIn(this.audioMenu, 4000)).catch(() => {});
                 }
                 document.removeEventListener('mousedown', unlockAudio);
-                document.removeEventListener('keydown', unlockAudio);
             };
             document.addEventListener('mousedown', unlockAudio);
-            document.addEventListener('keydown', unlockAudio);
 
-            // Input
-            window.addEventListener('keydown', (e) => this.keys[e.code] = true);
-            window.addEventListener('keyup', (e) => this.keys[e.code] = false);
-
-            // Debug Toggle
-            window.addEventListener('keydown', (e) => {
+            // Input Global
+            window.onkeydown = (e) => {
+                this.keys[e.code] = true;
                 if (e.code === 'KeyQ') {
                     this.debugMode = !this.debugMode;
                     const hud = document.getElementById('coord-hud');
                     if (hud) hud.style.display = this.debugMode ? 'block' : 'none';
                     if (this.pathMesh) this.pathMesh.visible = this.debugMode;
                 }
-            });
+            };
+            window.onkeyup = (e) => this.keys[e.code] = false;
 
+            this.animate();
+        }
+
+        animate() {
+            if (this.state === 'STOPPED') return;
+            requestAnimationFrame(() => this.animate());
             this.loop();
         }
 
@@ -474,6 +635,7 @@
             this.smoothedGroundY = 0;
 
             this.buildPath();
+            this.hunter = new Hunter(this.scene, this.pathCurve);
         }
 
         _buildSpriteTextures() {
@@ -901,6 +1063,175 @@
 
                 this.camera.position.lerp(targetCamPos, 0.08);
                 this.camera.lookAt(this.playerGroup.position.x, this.playerGroup.position.y + 1.5, this.playerGroup.position.z);
+
+                // MODO 2.5D ORIGINAL
+                if (!this.minigameActive) {
+                    const isMoving = left || right;
+                    if (left)  { this.pathProgress -= 0.025 * delta; this.facingRight = false; } // Velocidade reduzida
+                    else if (right) { this.pathProgress += 0.025 * delta; this.facingRight = true; } // Velocidade reduzida
+
+                    this.pathProgress = THREE.MathUtils.clamp(this.pathProgress, 0, 1);
+                    const curvePoint = this.pathCurve.getPointAt(this.pathProgress);
+                    const tangent    = this.pathCurve.getTangentAt(this.pathProgress);
+
+                    // Física
+                    if (jump && this.onGround) { this.vy = JUMP_FORCE; this.onGround = false; }
+                    this.vy += GRAVITY;
+                    this.playerY += this.vy;
+
+                    // Raycaster com suavização
+                    if (this.mapMesh) {
+                        const rayOrigin = new THREE.Vector3(curvePoint.x, 200, curvePoint.z);
+                        this.raycaster.set(rayOrigin, new THREE.Vector3(0, -1, 0));
+                        const hits = this.raycaster.intersectObject(this.mapMesh, true);
+                        if (hits.length > 0) {
+                            const rawY = hits.reduce((lo, h) => h.point.y < lo ? h.point.y : lo, hits[0].point.y);
+                            this.smoothedGroundY = THREE.MathUtils.lerp(this.smoothedGroundY, rawY + 1.5, 0.06);
+                        }
+                    }
+                    const groundY = this.smoothedGroundY;
+                    if (this.playerY < groundY) { this.playerY = groundY; this.vy = 0; this.onGround = true; }
+                    else if (this.playerY > groundY + 0.1) { this.onGround = false; }
+
+                    this.playerGroup.position.set(curvePoint.x, this.playerY, curvePoint.z);
+
+                    const sprState = !this.onGround ? 'jump' : isMoving ? 'walking' : 'idle';
+                    this.updateSpriteAnimation(sprState, delta);
+                    this.setWalkSound(isMoving && this.onGround);
+                } else {
+                    // MICO-LEÃO PARADO E TREMENDO NO MINIGAME
+                    this.updateSpriteAnimation('idle', delta);
+                    const shakeAmount = 0.06;
+                    this.spriteMesh.position.x = (Math.random() - 0.5) * shakeAmount;
+                    this.spriteMesh.position.z = (Math.random() - 0.5) * shakeAmount;
+
+                    // Aproximação do Caçador no Minigame
+                    this.hunter.progress += this.minigameHunterSpeed * delta;
+                }
+
+                // Update Hunter
+                if (this.hunter) {
+                    this.hunter.groundY = this.smoothedGroundY;
+                    this.hunter.update(this.pathProgress, delta, this.camera);
+                    
+                    // Condição de Game Over: Caçador alcançou o Mico (Distância curtíssima)
+                    // Importante: Só checa se o hunter já começou a perseguição (progress > 0)
+                    const dist = Math.abs(this.pathProgress - this.hunter.progress);
+                    if (this.hunter.progress > 0 && dist < 0.008 && this.hunter.state !== 'fainted') {
+                        this.gameOver();
+                    }
+                }
+
+                // Gatilho do Minigame
+                if (this.pathProgress >= MINIGAME_START_POS && !this.hunterDefeated && !this.minigameActive) {
+                    this.startMinigame();
+                }
+
+                if (this.minigameActive) {
+                    this.updateMinigame(delta);
+                }
+            }
+        }
+
+        gameOver() {
+            // Em vez de reload (que causa erro de WebGL), fazemos um reset interno
+            this.resetGame();
+        }
+
+        resetGame() {
+            // Reseta progresso e estados
+            this.pathProgress = 0;
+            this.playerY = 0;
+            this.vy = 0;
+            this.onGround = false;
+            this.smoothedGroundY = 0;
+            this.minigameActive = false;
+            this.minigameHits = 0;
+            this.hunterDefeated = false;
+            
+            if (this.hunter) {
+                this.hunter.progress = 0;
+                this.hunter.state = 'idle';
+                this.hunter.group.visible = false;
+            }
+
+            // Reseta UI
+            document.getElementById('minigame-container').style.display = 'none';
+            for (let i = 1; i <= 3; i++) {
+                document.getElementById(`dot-${i}`).classList.remove('hit');
+            }
+
+            // Reposiciona o grupo do player
+            if (this.pathCurve) {
+                const start = this.pathCurve.getPointAt(0);
+                this.playerGroup.position.set(start.x, 20, start.z);
+            }
+            
+            showNarrative("Você foi capturado! Tente novamente.");
+        }
+
+        startMinigame() {
+            this.minigameActive = true;
+            this.minigameHits = 0;
+            this.minigameAngle = 0;
+            this.minigameHunterSpeed = 0.005; // Reseta a velocidade de aproximação
+            document.getElementById('minigame-container').style.display = 'flex';
+            this.randomizeSuccessZone();
+        }
+
+        randomizeSuccessZone() {
+            const start = Math.random() * 300;
+            this.successZone = { start, end: start + 60 };
+            const dial = document.getElementById('minigame-sector');
+            dial.style.background = `conic-gradient(transparent ${start}deg, #fff ${start}deg ${start+60}deg, transparent ${start+60}deg)`;
+        }
+
+        updateMinigame(delta) {
+            this.minigameAngle = (this.minigameAngle + (this.minigameSpeed * 60 * delta)) % 360;
+            document.getElementById('minigame-needle').style.transform = `translateX(-50%) rotate(${this.minigameAngle}deg)`;
+
+            // Verificação de Input do Minigame (ACTION: E)
+            if (this.keys['KeyE']) {
+                this.keys['KeyE'] = false; // Consome o input
+                
+                const angle = this.minigameAngle;
+                const s = this.successZone;
+                
+                let success = false;
+                if (s.end > 360) {
+                    if (angle >= s.start || angle <= (s.end % 360)) success = true;
+                } else {
+                    if (angle >= s.start && angle <= s.end) success = true;
+                }
+
+                if (success) {
+                    this.minigameHits++;
+                    document.getElementById(`dot-${this.minigameHits}`).classList.add('hit');
+                    if (this.minigameHits >= 3) {
+                        this.endMinigame(true);
+                    } else {
+                        this.randomizeSuccessZone();
+                        this.minigameSpeed += 1.5; 
+                    }
+                } else {
+                    // ERROU: O caçador se aproxima MAIS RÁPIDO
+                    const container = document.getElementById('minigame-container');
+                    container.classList.add('shake');
+                    setTimeout(() => container.classList.remove('shake'), 200);
+                    
+                    this.minigameHunterSpeed += 0.015; // Aceleração por erro
+                    this.minigameSpeed = Math.max(4, this.minigameSpeed - 0.5);
+                }
+            }
+        }
+
+        endMinigame(success) {
+            this.minigameActive = false;
+            document.getElementById('minigame-container').style.display = 'none';
+            if (success) {
+                this.hunterDefeated = true;
+                this.hunter.state = 'fainted';
+                showNarrative("O caçador foi nocauteado! Continue o caminho.");
             }
         }
 
@@ -919,6 +1250,11 @@
         }
     }
 
-    window.addEventListener('load', () => new Game());
+    // Aguarda o carregamento e dá um tempo para a GPU limpar o lixo da sessão anterior
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            window.gameInst = new Game();
+        }, 500); 
+    });
 })();
 
