@@ -166,6 +166,37 @@ html {
 #splash-screen.hidden {
     opacity: 0;
     pointer-events: none;
+    transition: opacity 1.5s ease-in-out;
+}
+
+/* ─── SURVIVAL SCREEN ─── */
+#survival-screen {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 1.5s ease-in-out;
+    pointer-events: none;
+}
+
+#survival-screen.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.survival-text {
+    font-family: var(--font-ui); /* PlayfairDisplaySC */
+    font-size: 3.5rem;
+    color: #fff;
+    text-align: center;
+    line-height: 1.4;
+    text-transform: none;
+    font-weight: normal;
 }
 
 .menu-content {

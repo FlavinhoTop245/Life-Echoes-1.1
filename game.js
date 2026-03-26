@@ -68,6 +68,7 @@
         constructor(scene, pathCurve) {
             this.scene = scene;
             this.pathCurve = pathCurve;
+            this.raycaster = new THREE.Raycaster();
             this.group = new THREE.Group();
             this.scene.add(this.group);
             
@@ -154,36 +155,60 @@
             this.group.renderOrder = 998;
         }
 
-        update(playerProgress, delta, camera) {
+        update(playerProgress, delta, camera, mapMesh) {
             if (!this.mesh) return;
 
-            // Se o player ainda não chegou nos 30%, o hunter fica "escondido" no início do caminho
+            // Se o player ainda não chegou nos 30%, o hunter fica oculto
             if (playerProgress < HUNTER_CHASE_START && this.state !== 'fainted') {
                 this.group.visible = false;
                 this.progress = 0;
                 return;
             }
-            this.group.visible = true;
+
+            // Ativa o caçador se ele estava oculto
+            if (!this.group.visible && this.state !== 'fainted') {
+                this.group.visible = true;
+                this.progress = playerProgress - 0.12; // Começa um pouco fora da tela, vindo de trás
+            }
 
             if (this.state !== 'fainted') {
                 if (playerProgress >= HUNTER_CHASE_START && playerProgress < MINIGAME_START_POS) {
                     this.state = 'walking';
-                    // Caçador tenta alcançar o player com uma velocidade constante levemente menor que a do player em linha reta,
-                    // mas ele não para se o player parar.
-                    const hunterSpeed = 0.02 * delta; 
-                    this.progress += hunterSpeed;
+                    // Velocidade base de perseguição
+                    const hunterBaseSpeed = 0.022 * delta; 
+                    this.progress += hunterBaseSpeed;
+
+                    // --- RUBBER BANDING (TRAVA DE VISIBILIDADE) ---
+                    // Se o caçador ficar muito para trás (sumir da tela), ele ganha um boost ou teleporte visual
+                    const maxDistanceBehind = 0.09; 
+                    if (this.progress < playerProgress - maxDistanceBehind) {
+                        this.progress = THREE.MathUtils.lerp(this.progress, playerProgress - maxDistanceBehind, 0.05);
+                    }
                 } else if (playerProgress >= MINIGAME_START_POS) {
                     this.state = 'minigame';
-                    // No minigame ele se aproxima. A velocidade será controlada pelo Game (minigameHunterSpeed)
+                    // No minigame a posição é controlada externamente ou aproximada gradualmente
                 } else {
                     this.state = 'idle';
                 }
+
+                // Garante que o hunter não ultrapasse o player abruptamente (ele deve vir de trás)
+                const maxAhead = (this.state === 'minigame') ? 0.03 : -0.01; 
+                this.progress = Math.min(this.progress, playerProgress + maxAhead);
             }
 
-            // Garante que o hunter não ultrapasse o fim do caminho antes do mico
-            this.progress = Math.min(this.progress, playerProgress + 0.01);
+            const pos = this.pathCurve.getPointAt(Math.max(0, this.progress));
+            
+            // Raycasting individual para o Hunter (Chão próprio)
+            if (mapMesh) {
+                const rayOrigin = new THREE.Vector3(pos.x, 200, pos.z);
+                this.raycaster.set(rayOrigin, new THREE.Vector3(0, -1, 0));
+                const hits = this.raycaster.intersectObject(mapMesh, true);
+                if (hits.length > 0) {
+                    const groundY = hits.reduce((lo, h) => h.point.y < lo ? h.point.y : lo, hits[0].point.y);
+                    this.groundY = THREE.MathUtils.lerp(this.groundY || groundY, groundY + 1.5, 0.1);
+                }
+            }
 
-            const pos = this.pathCurve.getPointAt(this.progress);
             this.group.position.set(pos.x, this.groundY, pos.z);
 
             this.spriteTimer += delta;
@@ -199,6 +224,7 @@
                 }
             }
 
+            // Billboarding: Olha para a câmera, ignorando inclinação X/Z
             if (camera) {
                 this.mesh.quaternion.copy(camera.quaternion);
                 const e = new THREE.Euler().setFromQuaternion(this.mesh.quaternion, 'YXZ');
@@ -309,14 +335,10 @@
             };
             window.onkeyup = (e) => this.keys[e.code] = false;
 
-            this.animate();
-        }
-
-        animate() {
-            if (this.state === 'STOPPED') return;
-            requestAnimationFrame(() => this.animate());
             this.loop();
         }
+
+        // Loop removido e consolidado abaixo em loop()
 
         addLights(targetScene) {
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 1.5);
@@ -918,45 +940,53 @@
         }
 
         async runCutscene() {
-            this.state = 'CUTSCENE';
-            document.getElementById('splash-screen').style.opacity = '0';
-            setTimeout(() => document.getElementById('splash-screen').classList.add('hidden'), 1000);
+            // 1. Fade out no Menu (Opacidade 0, revelando o fundo preto do body)
+            const splash = document.getElementById('splash-screen');
+            splash.classList.add('hidden'); 
+            
+            // 2. Transição de áudio gradual
+            this._fadeAudioOut(this.audioMenu, 2000, () => {
+                this.audioGameplay.play().then(() => this._fadeAudioIn(this.audioGameplay, 3000)).catch(() => {});
+            });
 
+            await sleep(1500); // Aguarda o menu sumir completamente para o preto
+
+            // 3. Mostra a Tela de Sobrevivência (Preta)
+            const survival = document.getElementById('survival-screen');
+            survival.classList.add('active');
+            await sleep(1000); // Aguarda o fade-in da tela preta para o texto
+
+            // 4. PREPARAÇÃO SECRETA DO JOGO (Enquanto a tela está 100% preta)
+            // Primeiro mudamos o estado para interromper a renderização do menu
+            this.state = 'CUTSCENE';
             this.updateCameraProjection();
             this.pathProgress = 0.0;
             const startPt = this.pathCurve.getPointAt(0);
 
             if (this.debugMode) {
-                // Spawn top-down alto para debug geográfico
                 this.playerY = 50;
                 this.playerGroup.position.set(startPt.x, this.playerY, startPt.z);
                 this.camera.position.set(startPt.x, 80, startPt.z + 50);
                 this.camera.lookAt(startPt);
             } else {
-                // Modo 2.5D Real
                 this.playerY = 15;
                 this.playerGroup.position.set(startPt.x, this.playerY, startPt.z);
-
                 const up = new THREE.Vector3(0, 1, 0);
                 const tangent = this.pathCurve.getTangentAt(0);
                 const offsetDir = new THREE.Vector3().crossVectors(tangent, up).normalize();
-
-                const camPos = new THREE.Vector3().copy(startPt)
-                    .addScaledVector(offsetDir, 18)
-                    .add(new THREE.Vector3(0, 12, 0));
-
+                const camPos = new THREE.Vector3().copy(startPt).addScaledVector(offsetDir, 18).add(new THREE.Vector3(0, 12, 0));
                 this.camera.position.copy(camPos);
                 this.camera.lookAt(startPt);
             }
 
-            await sleep(1500);
+            await sleep(3500); // Tempo final de leitura do texto de sobrevivência
 
-            // Transição musical: fade out menu → fade in gameplay
-            this._fadeAudioOut(this.audioMenu, 1500, () => {
-                this.audioGameplay.play().then(() => this._fadeAudioIn(this.audioGameplay, 2000)).catch(() => {});
-            });
-
+            // 5. Inicia o Fade out na Tela Preta e ativa o loop de Gameplay
+            survival.classList.remove('active');
             this.state = 'PLAYING';
+            
+            await sleep(1500);
+            survival.style.display = 'none';
         }
 
         updatePlaying(delta) {
@@ -1016,59 +1046,11 @@
                 this.camera.lookAt(this.playerGroup.position);
 
             } else {
-                // MODO 2.5D ORIGINAL
-                const isMoving = left || right;
-                if (left)  { this.pathProgress -= 0.035 * delta; this.facingRight = false; }
-                else if (right) { this.pathProgress += 0.035 * delta; this.facingRight = true; }
-
-                this.pathProgress = THREE.MathUtils.clamp(this.pathProgress, 0, 1);
-                const curvePoint = this.pathCurve.getPointAt(this.pathProgress);
-                const tangent    = this.pathCurve.getTangentAt(this.pathProgress);
-
-                // Física
-                if (jump && this.onGround) { this.vy = JUMP_FORCE; this.onGround = false; }
-                this.vy += GRAVITY;
-                this.playerY += this.vy;
-
-                // Raycaster com suavização para eliminar solavancos do low-poly
-                if (this.mapMesh) {
-                    const rayOrigin = new THREE.Vector3(curvePoint.x, 200, curvePoint.z);
-                    this.raycaster.set(rayOrigin, new THREE.Vector3(0, -1, 0));
-                    const hits = this.raycaster.intersectObject(this.mapMesh, true);
-                    if (hits.length > 0) {
-                        const rawY = hits.reduce((lo, h) => h.point.y < lo ? h.point.y : lo, hits[0].point.y);
-                        this.smoothedGroundY = THREE.MathUtils.lerp(this.smoothedGroundY, rawY + 1.5, 0.06);
-                    }
-                }
-                const groundY = this.smoothedGroundY;
-                if (this.playerY < groundY) { this.playerY = groundY; this.vy = 0; this.onGround = true; }
-                else if (this.playerY > groundY + 0.1) { this.onGround = false; }
-
-                this.playerGroup.position.set(curvePoint.x, this.playerY, curvePoint.z);
-
-                // Animação do sprite
-                const sprState = !this.onGround ? 'jump' : isMoving ? 'walking' : 'idle';
-                this.updateSpriteAnimation(sprState, delta);
-
-                // Som de passos
-                this.setWalkSound(isMoving && this.onGround);
-
-                // Câmera
-                const up = new THREE.Vector3(0, 1, 0);
-                const offsetDir = new THREE.Vector3().crossVectors(tangent, up).normalize();
-                const camDist = 18, camHeight = 12;
-                const targetCamPos = new THREE.Vector3().copy(this.playerGroup.position)
-                    .addScaledVector(offsetDir, camDist)
-                    .add(new THREE.Vector3(0, camHeight, 0));
-
-                this.camera.position.lerp(targetCamPos, 0.08);
-                this.camera.lookAt(this.playerGroup.position.x, this.playerGroup.position.y + 1.5, this.playerGroup.position.z);
-
-                // MODO 2.5D ORIGINAL
+                // --- LÓGICA 2.5D CONSOLIDADA ---
                 if (!this.minigameActive) {
                     const isMoving = left || right;
-                    if (left)  { this.pathProgress -= 0.025 * delta; this.facingRight = false; } // Velocidade reduzida
-                    else if (right) { this.pathProgress += 0.025 * delta; this.facingRight = true; } // Velocidade reduzida
+                    if (left)  { this.pathProgress -= MOVE_SPEED * 0.15 * delta; this.facingRight = false; }
+                    else if (right) { this.pathProgress += MOVE_SPEED * 0.15 * delta; this.facingRight = true; }
 
                     this.pathProgress = THREE.MathUtils.clamp(this.pathProgress, 0, 1);
                     const curvePoint = this.pathCurve.getPointAt(this.pathProgress);
@@ -1079,12 +1061,13 @@
                     this.vy += GRAVITY;
                     this.playerY += this.vy;
 
-                    // Raycaster com suavização
+                    // Raycaster com suavização para eliminar solavancos do low-poly
                     if (this.mapMesh) {
                         const rayOrigin = new THREE.Vector3(curvePoint.x, 200, curvePoint.z);
                         this.raycaster.set(rayOrigin, new THREE.Vector3(0, -1, 0));
                         const hits = this.raycaster.intersectObject(this.mapMesh, true);
                         if (hits.length > 0) {
+                            // Pegar o ponto mais BAIXO (chão)
                             const rawY = hits.reduce((lo, h) => h.point.y < lo ? h.point.y : lo, hits[0].point.y);
                             this.smoothedGroundY = THREE.MathUtils.lerp(this.smoothedGroundY, rawY + 1.5, 0.06);
                         }
@@ -1095,9 +1078,23 @@
 
                     this.playerGroup.position.set(curvePoint.x, this.playerY, curvePoint.z);
 
+                    // Animação do sprite
                     const sprState = !this.onGround ? 'jump' : isMoving ? 'walking' : 'idle';
                     this.updateSpriteAnimation(sprState, delta);
+
+                    // Som de passos
                     this.setWalkSound(isMoving && this.onGround);
+
+                    // Câmera
+                    const up = new THREE.Vector3(0, 1, 0);
+                    const offsetDir = new THREE.Vector3().crossVectors(tangent, up).normalize();
+                    const camDist = 18, camHeight = 12;
+                    const targetCamPos = new THREE.Vector3().copy(this.playerGroup.position)
+                        .addScaledVector(offsetDir, camDist)
+                        .add(new THREE.Vector3(0, camHeight, 0));
+
+                    this.camera.position.lerp(targetCamPos, 0.08);
+                    this.camera.lookAt(this.playerGroup.position.x, this.playerGroup.position.y + 1.5, this.playerGroup.position.z);
                 } else {
                     // MICO-LEÃO PARADO E TREMENDO NO MINIGAME
                     this.updateSpriteAnimation('idle', delta);
@@ -1111,8 +1108,7 @@
 
                 // Update Hunter
                 if (this.hunter) {
-                    this.hunter.groundY = this.smoothedGroundY;
-                    this.hunter.update(this.pathProgress, delta, this.camera);
+                    this.hunter.update(this.pathProgress, delta, this.camera, this.mapMesh);
                     
                     // Condição de Game Over: Caçador alcançou o Mico (Distância curtíssima)
                     // Importante: Só checa se o hunter já começou a perseguição (progress > 0)
@@ -1236,15 +1232,15 @@
         }
 
         loop() {
+            if (this.state === 'STOPPED') return;
             requestAnimationFrame(() => this.loop());
             const delta = this.clock.getDelta();
             this.timeUniform.value = this.clock.getElapsedTime(); // Atualizar o timer do vento para os shaders
 
-            if (this.state === 'PLAYING') {
-                this.updatePlaying(delta);
+            if (this.state === 'PLAYING' || this.state === 'CUTSCENE') {
+                if (this.state === 'PLAYING') this.updatePlaying(delta);
                 this.renderer.render(this.scene, this.camera);
             } else if (this.state === 'MENU' || this.state === 'LOADING') {
-                // A rotação foi parada conforme solicitado pelo usuário.
                 this.renderer.render(this.menuScene, this.camera);
             }
         }

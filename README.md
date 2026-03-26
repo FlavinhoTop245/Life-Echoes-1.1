@@ -38,6 +38,35 @@ Devido às restrições de segurança do navegador (CORS) para módulos JavaScri
 
 ## 📜 Log de Modificações (Patches)
 
+### [Patch 1.48.0] - Março de 2026
+- **Sequência de Transição Narrativa**: Implementada tela de "Survival" entre o menu e o gameplay. O fluxo agora inclui:
+  1. Fade out suave do menu principal para o preto absoluto.
+  2. Surgimento da mensagem de sobrevivência sobre fundo preto, utilizando a tipografia PlayfairDisplay para um visual limão e profissional.
+  3. Sincronização de Perspectiva: O reposicionamento da câmera e do mapa ocorre em "background" enquanto a tela está totalmente opaca, eliminando glitches visuais.
+  4. Transição orquestrada de áudio: A trilha de gameplay surge enquanto o texto prepara o jogador para o início da jornada.
+  5. Revelação final através de um fade-out suave da tela preta para o mundo 3D pronto para o jogo.
+
+### [Patch 1.47.0] - Março de 2026
+- **IA de Perseguição "Visível" (Rubber-Banding)**: Implementada lógica de proximidade visual constante. O caçador agora "se prende" à borda da câmera se o jogador correr muito rápido, garantindo que a ameaça seja sempre visível e mantendo a tensão da corrida.
+- **Spawn Dinâmico**: Corrigido o bug onde o caçador surgia no início do mapa (progress 0); agora ele aparece estrategicamente logo atrás do mico-leão ao cruzar o gatilho de 30% do percurso.
+- **Raycasting Independente**: O caçador agora processa sua própria detecção de solo em tempo real, eliminando erros de altura e garantindo que ele siga o relevo do terreno de forma independente do jogador.
+
+### [Patch 1.46.0] - Março de 2026
+- **Correção Crítica de Performance**: Corrigido o bug recursivo de `requestAnimationFrame` que multiplicava a carga de renderização a cada frame, causando lentidão extrema após alguns segundos de jogo.
+- **Refatoração de Loop**: Consolidação da função `animate()` e `loop()` em um único ciclo de execução otimizado com guards de estado.
+- **Limpeza de Código**: Removida lógica de controle de movimento e raycasting duplicada em `updatePlaying`, reduzindo processamento redundante e inconsistências na velocidade.
+
+### [Patch 1.45.0] - Março de 2026
+- **Upgrade para Versão 2.0**: O projeto foi oficialmente elevado para o status de Versão 2.0 com a estabilização do ciclo de gameplay completo (Início -> Perseguição -> Confronto -> Fim).
+- **Bilboarding e Espessura de Sprite**: Implementação de "Papelão 3D" (dois planos paralelos) para o mico-leão, garantindo visual consistente de todos os ângulos da câmera 2.5D sem distorções de escala.
+
+### [Patch 1.44.0] - Março de 2026
+- **Sistema de Inimigo (Caçador)**: Implementação do antagonista dinâmico. O caçador surge aos 30% do caminho e persegue o jogador. Possui IA de perseguição linear e sistema de sprites com ChromaKey e contorno preto agressivo para destaque visual.
+- **Minigame de Confronto (Quick Time Event)**: Ao atingir 85% do progresso, um minigame de precisão é ativado. O jogador deve pressionar [E] no momento exato (zona de sucesso no dial) para repelir o caçador. Três acertos nocauteiam o inimigo, permitindo seguir o caminho livremente.
+- **Narrativa e Feedback UI**: Adicionada barra de narrativa superior para mensagens de contexto e tutorial com efeitos de fade.
+- **Aperfeiçoamento de Debug**: Tecla de atalho de debug alterada para `Q` para facilitar o mapeamento rápido de coordenadas no HUD verde.
+- **Física de Solo (Lowest-Y Raycasting)**: Refinamento final na detecção de solo para garantir que tanto o player quanto o caçador ignorem copas de árvores e fiquem sempre no nível real do terreno.
+
 ### [Patch 1.43.0] - Março de 2026
 - **Sequência de Introdução Cinematográfica**: Implementada uma intro de "filme" antes do menu principal. 
   1. A experiência começa em tela preta total para imersão.
