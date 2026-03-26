@@ -154,9 +154,15 @@
 
         // ─── AUDIO ─────────────────────────────────────────────────────────────────
         setupAudio() {
+<<<<<<< HEAD
             this.musicVolume = 0.25;
             this.sfxVolume   = 0.35;
+=======
+            this.musicVolume = 0.8;
+            this.sfxVolume   = 1.0;
+>>>>>>> 9bdd2cad40b54425babc0d97358b8b28f6c9079b
             this._walkPlaying = false;
+            this._menuMusicStarted = false;
 
             this.audioMenu     = new Audio('music/musicMenu.mp3');
             this.audioMenu.loop = true;
@@ -173,40 +179,62 @@
             this.sfxWalk.loop = true;
             this.sfxWalk.volume = this.sfxVolume;
 
-            // Tenta iniciar música de menu com fade in
+            // Tenta iniciar música de menu
             const startMenu = () => {
-                if (this._menuMusicStarted) return;
-                this._menuMusicStarted = true;
-                this.audioMenu.play().then(() => this._fadeAudioIn(this.audioMenu, 2000)).catch(() => {});
+                if (this._menuMusicStarted || this.state !== 'MENU') return;
+                this.audioMenu.play().then(() => {
+                    this._menuMusicStarted = true;
+                    this._fadeAudioIn(this.audioMenu, 2000);
+                    // Remove listeners upon true success
+                    document.removeEventListener('click', startMenu);
+                    document.removeEventListener('keydown', startMenu);
+                }).catch(() => {});
             };
-            // Autoplay imediato + fallback no primeiro clique/tecla
-            this.audioMenu.play().then(() => { this._menuMusicStarted = true; this._fadeAudioIn(this.audioMenu, 2000); }).catch(() => {});
-            document.addEventListener('click',   startMenu, { once: true });
-            document.addEventListener('keydown', startMenu, { once: true });
+
+            // Initial manual attempt to start auto-play
+            this.audioMenu.play().then(() => { 
+                this._menuMusicStarted = true; 
+                this._fadeAudioIn(this.audioMenu, 2000); 
+            }).catch(() => {});
+
+            document.addEventListener('click', startMenu);
+            document.addEventListener('keydown', startMenu);
         }
 
         _fadeAudioIn(audio, duration) {
-            const target = this.musicVolume;
+            if (!audio) return;
+            const target = audio === this.audioMenu || audio === this.audioGameplay ? this.musicVolume : this.sfxVolume;
             audio.volume = 0;
             const steps = 40, stepTime = duration / steps;
             let step = 0;
             const id = setInterval(() => {
                 audio.volume = Math.min((++step / steps) * target, target);
-                if (step >= steps) clearInterval(id);
+                if (step >= steps || audio.volume >= target) clearInterval(id);
             }, stepTime);
         }
 
         _fadeAudioOut(audio, duration, cb) {
+            if (!audio) { if(cb) cb(); return; }
             const start = audio.volume, steps = 40, stepTime = duration / steps;
             let step = 0;
             const id = setInterval(() => {
                 audio.volume = Math.max(start * (1 - (++step / steps)), 0);
-                if (step >= steps) { clearInterval(id); audio.pause(); audio.currentTime = 0; if (cb) cb(); }
+                if (step >= steps || audio.volume <= 0) { 
+                    clearInterval(id); 
+                    audio.pause(); 
+                    audio.currentTime = 0; 
+                    if (cb) cb(); 
+                }
             }, stepTime);
         }
 
         playSFXHover() {
-            try { this.sfxHover.currentTime = 0; this.sfxHover.volume = this.sfxVolume; this.sfxHover.play().catch(() => {}); } catch(e) {}
+            try { 
+                // Clona o nó para que múltiplos hovers possam tocar simultaneamente sobrepondo sem engasgos
+                let snd = this.sfxHover.cloneNode();
+                snd.volume = this.sfxVolume;
+                snd.play().catch(() => {}); 
+            } catch(e) {}
         }
 
         setWalkSound(active) {
@@ -286,8 +314,10 @@
 
                     // Inicia a música de menu mesmo sem o fade (autoplay policy)
                     if (!this._menuMusicStarted) {
-                        this.audioMenu.play().then(() => this._fadeAudioIn(this.audioMenu, 2000)).catch(() => {});
-                        this._menuMusicStarted = true;
+                        this.audioMenu.play().then(() => {
+                            this._menuMusicStarted = true;
+                            this._fadeAudioIn(this.audioMenu, 2000);
+                        }).catch(() => {});
                     }
 
                     // Configura a câmera circular para rodar no MenuScene
