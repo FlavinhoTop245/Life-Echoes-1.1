@@ -269,6 +269,15 @@
             this.keys = {};
             this.timeUniform = { value: 0 }; 
 
+            // Final Sequence States
+            this.fruitCollected = false;
+            this.isEnding = false;
+            this.endingSpeedMult = 1.0;
+            this.fadeTriggered = false;
+
+            this.ENDING_POS = 0.98;
+            this.climaxActive = false;
+
             this.init();
         }
 
@@ -303,6 +312,7 @@
             this.addLights(this.menuScene);
             this.loadAssets();
             this.buildPlayer();
+            this.buildFruitLine();
             this.setupAudio();
             this.setupUIEvents();
 
@@ -331,6 +341,11 @@
                     const hud = document.getElementById('coord-hud');
                     if (hud) hud.style.display = this.debugMode ? 'block' : 'none';
                     if (this.pathMesh) this.pathMesh.visible = this.debugMode;
+                }
+
+                // Transição do Manifesto para Créditos
+                if (this.climaxActive && (e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter')) {
+                    this.goToCredits();
                 }
             };
             window.onkeyup = (e) => this.keys[e.code] = false;
@@ -922,6 +937,32 @@
             this.scene.add(this.pathMesh);
         }
 
+        buildFruitLine() {
+            // Criando uma Fruta Low-Poly (Icosaedro) Geométrico
+            const fruitGeo = new THREE.IcosahedronGeometry(0.8, 0); // 0 subdivisões = low poly puro
+            const fruitMat = new THREE.MeshStandardMaterial({ 
+                color: 0xffd700, 
+                emissive: 0xffaa00, 
+                emissiveIntensity: 0.5,
+                flatShading: true 
+            });
+            this.fruitMesh = new THREE.Mesh(fruitGeo, fruitMat);
+            
+            // Posiciona a fruta no final do caminho (93% do progresso)
+            const fruitPos = this.pathCurve.getPointAt(0.93);
+            
+            // Raycast para garantir que a fruta esteja no chão
+            const ray = new THREE.Raycaster(new THREE.Vector3(fruitPos.x, 200, fruitPos.z), new THREE.Vector3(0, -1, 0));
+            this.fruitMesh.position.set(fruitPos.x, 2, fruitPos.z); // Altura padrão inicial
+            
+            this.scene.add(this.fruitMesh);
+
+            // Adiciona um brilho/luz pontual na fruta
+            this.fruitLight = new THREE.PointLight(0xffaa00, 2, 10);
+            this.fruitLight.position.copy(this.fruitMesh.position);
+            this.scene.add(this.fruitLight);
+        }
+
         onResize() {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.updateCameraProjection();
@@ -1049,8 +1090,10 @@
                 // --- LÓGICA 2.5D CONSOLIDADA ---
                 if (!this.minigameActive) {
                     const isMoving = left || right;
-                    if (left)  { this.pathProgress -= MOVE_SPEED * 0.15 * delta; this.facingRight = false; }
-                    else if (right) { this.pathProgress += MOVE_SPEED * 0.15 * delta; this.facingRight = true; }
+                    let currentMoveSpeed = MOVE_SPEED * 0.15 * this.endingSpeedMult;
+
+                    if (left)  { this.pathProgress -= currentMoveSpeed * delta; this.facingRight = false; }
+                    else if (right) { this.pathProgress += currentMoveSpeed * delta; this.facingRight = true; }
 
                     this.pathProgress = THREE.MathUtils.clamp(this.pathProgress, 0, 1);
                     const curvePoint = this.pathCurve.getPointAt(this.pathProgress);
@@ -1126,7 +1169,81 @@
                 if (this.minigameActive) {
                     this.updateMinigame(delta);
                 }
+
+                // --- MECÂNICA DE FINALIZAÇÃO (FRUTA E FADE) ---
+                
+                // Animação da Fruta (Flutuando e Girando)
+                if (this.fruitMesh && !this.fruitCollected) {
+                    this.fruitMesh.rotation.y += 2 * delta;
+                    this.fruitMesh.position.y = 1.5 + Math.sin(this.timeUniform.value * 3) * 0.3;
+                    
+                    // Colisão com a fruta (aproximadamente 93% de progresso)
+                    if (this.pathProgress >= 0.925) {
+                        this.collectFruit();
+                    }
+                }
+
+                // Efeito de lentidão após pegar a fruta
+                if (this.isEnding) {
+                    this.endingSpeedMult = Math.max(0.05, this.endingSpeedMult - 0.25 * delta);
+                    
+                    // Iniciar Fade Out se estiver perto do fim (97.5%)
+                    if (this.pathProgress >= 0.975 && !this.fadeTriggered) {
+                        this.startFinalFade();
+                    }
+                }
             }
+        }
+
+        collectFruit() {
+            if (this.fruitCollected) return;
+            this.fruitCollected = true;
+            this.isEnding = true;
+            
+            // Remove a fruta da cena
+            if (this.fruitMesh) this.fruitMesh.visible = false;
+            if (this.fruitLight) this.fruitLight.intensity = 0;
+
+            showNarrative("Objetivo cumprido! Você encontrou alimento.", 5000);
+            
+            // Efeito sonoro de coleta (reaproveitando hover ou similar se necessário)
+            this.playSFXHover(); 
+        }
+
+        startFinalFade() {
+            if (this.fadeTriggered) return;
+            this.fadeTriggered = true;
+            
+            // Fade out da música de gameplay
+            this._fadeAudioOut(this.audioGameplay, 3000);
+
+            // Ativa a tela de manifesto
+            const climax = document.getElementById('climax-screen');
+            if (climax) {
+                climax.classList.add('active');
+                this.climaxActive = true;
+                this.state = 'CLIMAX';
+            }
+        }
+
+        goToCredits() {
+            if (this.state === 'CREDITS') return;
+            this.climaxActive = false;
+            this.state = 'CREDITS';
+            
+            const climax = document.getElementById('climax-screen');
+            if (climax) climax.classList.remove('active');
+
+            // Ativa os créditos reais
+            const credits = document.getElementById('credits-screen');
+            if (credits) {
+                credits.classList.add('active');
+            }
+
+            // Reinicia o jogo após o término da rolagem (45s de animação + 2s de fade)
+            setTimeout(() => {
+                window.location.reload();
+            }, 47000);
         }
 
         gameOver() {

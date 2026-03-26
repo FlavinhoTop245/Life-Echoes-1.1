@@ -38,6 +38,21 @@ Devido às restrições de segurança do navegador (CORS) para módulos JavaScri
 
 ## 📜 Log de Modificações (Patches)
 
+### [Patch 1.50.0] - Março de 2026
+- **Créditos Finais Cinematográficos**: Implementada a sequência de encerramento completa com rolagem vertical automática.
+- **Design de Fontes Requisitado**: Utilização de `IMFellEnglish` para títulos de seção e `PlayfairDisplay` para nomes, garantindo uma estética de filme clássico.
+- **Loop de Rejogo**: Sistema de reinício automático implementado para recarregar a experiência após a conclusão dos créditos (45s de exibição).
+- **Agradecimentos e Mentorias**: Listagem detalhada de toda a equipe, modelos 3D externos, trilha sonora de Pixabay e mentores acadêmicos.
+
+### [Patch 1.49.0] - Março de 2026
+- **Sequência de Finalização (Capítulo 1)**: Implementado o desfecho da jornada do mico-leão-dourado.
+- **Objetivo Final (Fruta Dourada)**: Adicionada uma fruta low-poly brilhante e rotativa ao final do percurso (93%). A coleta marca o cumprimento do objetivo narrativo de sobrevivência.
+- **Efeito de Exaustão e Desfecho**: Após a coleta, o personagem sofre uma redução progressiva de velocidade (slowdown), simulando a saciedade e o cansaço ao fim da trilha.
+- **Fade Out Cinematográfico**: Ao atingir o limite do mapa (98%), a tela escurece totalmente através de um fade suave, acompanhado do encerramento da trilha sonora e da mensagem final de "Continua...".
+
+- **Tela de Manifesto e Clímax**: Após o desfecho, surge uma tela preta de conscientização com frases de impacto sobre a preservação da Amazônia, integrando o logo da SOS Amazônia e um botão de doação funcional.
+- **Chamada para Ação (CTA)**: Adicionado um convite direto à preservação ambiental, permitindo que o jogador contribua com causas reais antes de seguir para os créditos finais.
+
 ### [Patch 1.48.0] - Março de 2026
 - **Sequência de Transição Narrativa**: Implementada tela de "Survival" entre o menu e o gameplay. O fluxo agora inclui:
   1. Fade out suave do menu principal para o preto absoluto.

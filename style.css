@@ -485,20 +485,161 @@ h1.menu-title {
     }
 }
 
-/* ─── QUIT SCREEN ─── */
-#quit-overlay {
+/* ─── CLIMAX / MANIFESTO SCREEN ─── */
+#climax-screen {
     position: fixed;
     inset: 0;
     background: #000;
-    z-index: 9999;
+    z-index: 5000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     opacity: 0;
-    pointer-events: none;
+    visibility: hidden;
     transition: opacity 2s ease;
+    padding: 40px;
+    text-align: center;
 }
 
-#quit-overlay.active {
+#climax-screen.active {
     opacity: 1;
-    pointer-events: auto;
+    visibility: visible;
+}
+
+.climax-content {
+    max-width: 1000px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3.5rem;
+}
+
+.climax-phrase {
+    font-family: var(--font-ui); /* PlayfairDisplaySC */
+    font-size: 2.2rem;
+    color: #fff;
+    line-height: 1.2;
+    text-transform: none;
+    letter-spacing: 1px;
+}
+
+.climax-cta {
+    display: flex;
+    align-items: center;
+    gap: 2.5rem;
+    margin-top: 2rem;
+}
+
+.sos-logo {
+    height: 90px;
+    width: auto;
+}
+
+.climax-donate-btn {
+    background: #fff;
+    color: #000;
+    padding: 18px 45px;
+    font-size: 1.4rem;
+    font-family: var(--font-buttons);
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    border: 2px solid #fff;
+}
+
+.climax-donate-btn:hover {
+    background: transparent;
+    color: #fff;
+    transform: scale(1.05);
+}
+
+.climax-footer {
+    position: absolute;
+    bottom: 40px;
+    width: 100%;
+}
+
+.blinking-arrow {
+    font-size: 2rem;
+    color: #fff;
+    animation: blink 1s infinite alternate;
+}
+
+@keyframes blink {
+    from { opacity: 0.2; transform: translateY(0); }
+    to { opacity: 1; transform: translateY(10px); }
+}
+
+/* ─── CREDITS SCREEN ─── */
+#credits-screen {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 6000;
+    display: none; /* Ativado via JS */
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+    text-align: center;
+}
+
+#credits-screen.active {
+    display: flex;
+    animation: fadeInCredits 2s forwards;
+}
+
+#credits-scroll {
+    position: absolute;
+    top: 100%; /* Começa fora da tela abaixo */
+    width: 80%;
+    display: flex;
+    flex-direction: column;
+    gap: 8rem;
+    padding-bottom: 200px;
+}
+
+#credits-screen.active #credits-scroll {
+    animation: scrollCredits 45s linear forwards;
+}
+
+.credits-section {
+    width: 100%;
+}
+
+.credits-title {
+    font-family: var(--font-buttons); /* IMFellEnglish */
+    font-size: 3rem;
+    color: var(--clr-golden);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    letter-spacing: 4px;
+}
+
+.credits-name {
+    font-family: var(--font-ui); /* PlayfairDisplaySC */
+    font-size: 1.8rem;
+    color: #fff;
+    margin-bottom: 0.8rem;
+    font-weight: normal;
+}
+
+.credits-highlight {
+    font-family: var(--font-buttons);
+    font-size: 4rem;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(255,255,255,0.5);
+}
+
+@keyframes scrollCredits {
+    0% { top: 100%; }
+    100% { top: -450%; } /* Ajustar conforme tamanho do conteúdo */
+}
+
+@keyframes fadeInCredits {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes fadeIn {
