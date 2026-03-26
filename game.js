@@ -154,13 +154,11 @@
 
         // ─── AUDIO ─────────────────────────────────────────────────────────────────
         setupAudio() {
-<<<<<<< HEAD
             this.musicVolume = 0.25;
             this.sfxVolume   = 0.35;
-=======
             this.musicVolume = 0.8;
             this.sfxVolume   = 1.0;
->>>>>>> 9bdd2cad40b54425babc0d97358b8b28f6c9079b
+
             this._walkPlaying = false;
             this._menuMusicStarted = false;
 
