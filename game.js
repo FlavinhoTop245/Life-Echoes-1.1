@@ -15,9 +15,15 @@
     // Sprite sheet: spritesCharacter.png (1456×770 px)
     // Coordenadas originais exatas para focar apenas nos macacos (ignorando texto à esquerda)
     const SPRITE_FRAMES = {
-        idle:    [[567, 538, 148, 222]],
-        walking: [[567,173,162,167],[729,173,162,167],[891,173,162,167],[1053,173,162,167]],
-        jump:    [[567,355,166,170],[733,355,166,170]],
+        walking: [
+            [398, 237, 137, 148], [546, 237, 137, 148], [696, 237, 137, 148], [844, 237, 137, 148]
+        ],
+        jump: [
+            [394, 452, 146, 148], [546, 452, 146, 148]
+        ],
+        idle: [
+            [396, 658, 114, 150]
+        ],
     };
     const SPRITE_FPS = 8;
 
@@ -148,8 +154,8 @@
 
         // ─── AUDIO ─────────────────────────────────────────────────────────────────
         setupAudio() {
-            this.musicVolume = 0.5;
-            this.sfxVolume   = 0.5;
+            this.musicVolume = 0.25;
+            this.sfxVolume   = 0.35;
             this._walkPlaying = false;
 
             this.audioMenu     = new Audio('music/musicMenu.mp3');
@@ -403,10 +409,8 @@
             this.spriteMesh   = null;
             this.spriteMat    = null;
 
-            // Carrega sprite sheet e extrai frames
-            const img = new Image();
-            img.onload = () => this._buildSpriteTextures(img);
-            img.src = 'sprites/spritesCharacter.png';
+            // Inicializa sistema de texturas múltiplas (pasta character/)
+            this._buildSpriteTextures();
 
             this.playerY = 2; this.vy = 0;
             this.onGround = false; this.facingRight = true;
@@ -416,73 +420,161 @@
             this.buildPath();
         }
 
-        _buildSpriteTextures(img) {
-            this.spriteTextures = {};
-            for (const [anim, frames] of Object.entries(SPRITE_FRAMES)) {
-                this.spriteTextures[anim] = frames.map(([sx, sy, sw, sh]) => {
-                    const cv  = document.createElement('canvas');
-                    cv.width  = sw; cv.height = sh;
-                    const ctx = cv.getContext('2d');
-                    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        _buildSpriteTextures() {
+            this.spriteTextures = {
+                walking: [],
+                jump: [],
+                idle: []
+            };
 
-                    // Chromakey: Apenas apaga a cor cinza escuro de fundo da imagem diretamente
-                    const id = ctx.getImageData(0, 0, sw, sh), d = id.data;
-                    for (let i = 0; i < d.length; i += 4) {
-                        const r = d[i], g = d[i+1], b = d[i+2];
-                        if (r > 50 && r < 130 && g > 50 && g < 130 && b > 50 && b < 130
-                            && Math.abs(r-g) < 30 && Math.abs(g-b) < 30) {
-                            d[i+3] = 0; // Transparente
-                        } else if (r > 215 && g > 215 && b > 215) {
-                            d[i+3] = 0; // Branco vira transparente
+            const loader = new THREE.TextureLoader();
+            const processTexture = (path) => {
+                return new Promise((resolve) => {
+                    loader.load(path, (tex) => {
+                        const img = tex.image;
+                        const cv = document.createElement('canvas');
+                        // Aumenta o canvas um pouco para acomodar o contorno sem cortar
+                        const padding = 12; 
+                        cv.width = img.width + padding * 2; 
+                        cv.height = img.height + padding * 2;
+                        const ctx = cv.getContext('2d');
+                        
+                        // Desenha o sprite original temporariamente para processar a transparência
+                        ctx.drawImage(img, padding, padding);
+                        const id = ctx.getImageData(0, 0, cv.width, cv.height), d = id.data;
+                        for (let i = 0; i < d.length; i += 4) {
+                            const r = d[i], g = d[i+1], b = d[i+2];
+                            if (r > 40 && r < 160 && Math.abs(r-g) < 20 && Math.abs(g-b) < 20) {
+                                d[i+3] = 0;
+                            } else if (r > 220 && g > 220 && b > 220) {
+                                d[i+3] = 0;
+                            }
                         }
-                    }
-                    ctx.putImageData(id, 0, 0);
+                        ctx.putImageData(id, 0, 0);
 
-                    const tex = new THREE.CanvasTexture(cv);
-                    tex.magFilter = THREE.LinearFilter;
-                    tex.minFilter = THREE.LinearFilter;
-                    return tex;
+                        // Agora que temos a imagem limpa no canvas, vamos criar o CONTORNO
+                        // Salvamos o sprite limpo
+                        const spriteClean = document.createElement('canvas');
+                        spriteClean.width = cv.width; spriteClean.height = cv.height;
+                        spriteClean.getContext('2d').putImageData(id, 0, 0);
+
+                        // Limpa o canvas principal para desenhar o contorno por baixo
+                        ctx.clearRect(0, 0, cv.width, cv.height);
+
+                        // Desenha o contorno preto grosso (8 direções)
+                        const thickness = 5;
+                        ctx.globalCompositeOperation = 'source-over';
+                        for(let x = -thickness; x <= thickness; x += thickness/2) {
+                            for(let y = -thickness; y <= thickness; y += thickness/2) {
+                                if (x*x + y*y > thickness*thickness) continue;
+                                ctx.drawImage(spriteClean, x, y);
+                            }
+                        }
+                        
+                        // Transforma o contorno em PRETO PURO
+                        ctx.globalCompositeOperation = 'source-in';
+                        ctx.fillStyle = 'black';
+                        ctx.fillRect(0, 0, cv.width, cv.height);
+
+                        // Desenha o sprite original por cima do contorno preto
+                        ctx.globalCompositeOperation = 'source-over';
+                        ctx.drawImage(spriteClean, 0, 0);
+
+                        const cleanTex = new THREE.CanvasTexture(cv);
+                        cleanTex.magFilter = THREE.LinearFilter;
+                        cleanTex.minFilter = THREE.LinearFilter;
+                        resolve(cleanTex);
+                    });
                 });
-            }
-            // Plano billboard normalizado e ampliado para acomodar 250x250
-            const planeGeo = new THREE.PlaneGeometry(3.5, 3.5);
-            this.spriteMat = new THREE.MeshBasicMaterial({
-                map: this.spriteTextures.idle[0],
-                transparent: true, side: THREE.DoubleSide,
-                depthWrite: false, alphaTest: 0.05,
+            };
+
+            // Definindo as ordens específicas conforme solicitado
+            const walkPaths = [
+                'sprites/character/spriteWalking1.png',
+                'sprites/character/spriteWalking2.png',
+                'sprites/character/spriteWalking3.png',
+                'sprites/character/spriteWalking4.png',
+                'sprites/character/spriteWalking3.png',
+                'sprites/character/spriteWalking2.png'
+            ];
+            const jumpPaths = [
+                'sprites/character/spriteJump1.png',
+                'sprites/character/spriteJump2.png'
+            ];
+            const idlePath = 'sprites/character/spriteIdle.png';
+
+            Promise.all([
+                ...walkPaths.map(p => processTexture(p)),
+                ...jumpPaths.map(p => processTexture(p)),
+                processTexture(idlePath)
+            ]).then((results) => {
+                this.spriteTextures.walking = results.slice(0, 6);
+                this.spriteTextures.jump = results.slice(6, 8);
+                this.spriteTextures.idle = [results[8]];
+
+                // Criação do "Papelão 3D" (Dois planos paralelos para dar espessura)
+                this.spriteMesh = new THREE.Group();
+                const planeGeo = new THREE.PlaneGeometry(3.5, 3.5);
+                
+                this.spriteMat = new THREE.MeshBasicMaterial({
+                    map: this.spriteTextures.idle[0],
+                    transparent: true, side: THREE.FrontSide,
+                    alphaTest: 0.1,
+                });
+
+                const frontPlane = new THREE.Mesh(planeGeo, this.spriteMat);
+                const backPlane = new THREE.Mesh(planeGeo, this.spriteMat);
+                
+                // Afasta levemente para dar a "grossura" de papelão (0.05 unidades)
+                frontPlane.position.z = 0.025;
+                backPlane.position.z = -0.025;
+                backPlane.rotation.y = Math.PI; // Vira o verso
+
+                this.spriteMesh.add(frontPlane);
+                this.spriteMesh.add(backPlane);
+                this.spriteMesh.position.y = 1.75;
+                this.playerGroup.add(this.spriteMesh);
             });
-            this.spriteMesh = new THREE.Mesh(planeGeo, this.spriteMat);
-            this.spriteMesh.position.y = 1.75; // Eleva acima do chão (metade de 3.5)
-            this.playerGroup.add(this.spriteMesh);
         }
 
         updateSpriteAnimation(state, delta) {
-            if (!this.spriteTextures || !this.spriteMesh) return;
+            if (!this.spriteTextures || !this.spriteMesh || !this.spriteTextures.idle.length) return;
+            
             if (state !== this.spriteState) {
                 this.spriteState = state;
                 this.spriteFrame = 0;
                 this.spriteTimer = 0;
             }
-            const frames = this.spriteTextures[this.spriteState] || this.spriteTextures.idle;
-            this.spriteTimer += delta;
-            if (this.spriteTimer > 1 / SPRITE_FPS) {
-                this.spriteTimer = 0;
-                this.spriteFrame = (this.spriteFrame + 1) % frames.length;
+
+            let frames = this.spriteTextures[this.spriteState] || this.spriteTextures.idle;
+            
+            if (this.spriteState === 'jump') {
+                if (Math.abs(this.vy) < 0.1) {
+                    this.spriteFrame = 1; 
+                } else {
+                    this.spriteFrame = 0;
+                }
+            } else {
+                this.spriteTimer += delta;
+                if (this.spriteTimer > 1 / SPRITE_FPS) {
+                    this.spriteTimer = 0;
+                    this.spriteFrame = (this.spriteFrame + 1) % frames.length;
+                }
             }
-            this.spriteMat.map = frames[this.spriteFrame];
+
+            this.spriteMat.map = frames[this.spriteFrame] || this.spriteTextures.idle[0];
             this.spriteMat.needsUpdate = true;
             
-            // Cylindrical Billboarding: olhar para a câmera, mas sem deitar (Pitch = 0, Roll = 0)
-            // Isso garante que o sprite fique em pé "em cima do solo" como um personagem 3D.
+            // "Billboarding" Puro: Sempre olha para a câmera
             if (this.camera) {
-                const camPos = this.camera.position.clone();
-                // Assumindo que o playerGroup não tem rotação (XYZ = 0,0,0)
-                camPos.y = this.playerGroup.position.y + this.spriteMesh.position.y;
-                this.playerGroup.worldToLocal(camPos);
-                this.spriteMesh.lookAt(camPos);
+                this.spriteMesh.quaternion.copy(this.camera.quaternion);
+                // Trava a rotação em X e Z para ele não ficar "deitado" se a câmera olhar de cima
+                const euler = new THREE.Euler().setFromQuaternion(this.spriteMesh.quaternion, 'YXZ');
+                euler.x = 0;
+                euler.z = 0;
+                this.spriteMesh.quaternion.setFromEuler(euler);
             }
-            // Espelhar quando vai para a esquerda
-            this.spriteMesh.scale.x = this.facingRight ? 1 : -1;
+            this.spriteMesh.scale.x = this.facingRight ? -1 : 1;
         }
 
         buildPath() {

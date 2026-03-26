@@ -38,6 +38,21 @@ Devido às restrições de segurança do navegador (CORS) para módulos JavaScri
 
 ## 📜 Log de Modificações (Patches)
 
+### [Patch 1.41.0] - Março de 2026
+- **Sistema de Animação de Alta Fidelidade (Individual Sprites)**: O sistema de sprites foi migrado de um único sheet para carregamento individual da pasta `sprites/character/`. 
+  1. **Walking**: Implementado loop customizado de 6 frames (`1-2-3-4-3-2`) para uma fluidez orgânica. 
+  2. **Jump Dinâmico**: O sprite agora reage à física; exibe `spriteJump1` na subida/descida e `spriteJump2` cravado no ápice do salto (gravidade zero). 
+  3. **ChromaKey em Tempo Real**: Aplicado filtro de remoção de fundo cinza nativo em cada frame carregado, garantindo transparência perfeita no mundo 3D.
+
+### [Patch 1.40.0] - Março de 2026
+- **Realinhamento de Sprites (Mico-Leão-Dourado)**: As coordenadas de corte do sprite sheet `spritesCharacter.png` foram recalibradas com precisão cirúrgica para extrair apenas o conteúdo interno dos retângulos tracejados. Isso remove artefatos visuais das bordas e garante que as animações de *Walking*, *Jump* e *Idle* utilizem o design oficial pretendido, mantendo a proporção correta e o alinhamento centralizado do personagem.
+
+### [Patch 1.39.0] - Março de 2026
+- **Calibração Relativa de Áudio**: Tendo em vista que a maioria dos usuários joga com o volume geral do sistema operacional/headset muito alto (ex: 80%), as alocações padrão do jogo foram diminuídas severamente para evitar estourar o áudio e assustar o jogador em novos acessos. A nova métrica inicial é: Música em `25%` e Sound Effects em `35%`.
+
+### [Patch 1.38.0] - Março de 2026
+- **Afinação de Áudio**: Redefinidos os valores iniciais (Default) dos volumes do jogo na UI e no sistema interno. A Música de fundo começa suave a `40%` para não encobrir as ações do jogador, enquanto os Efeitos Sonoros (SFX) como hover em botões e passos agora iniciam padronizados a `50%`, garantindo um balanceamento natural de primeira viagem.
+
 ### [Patch 1.37.0] - Março de 2026
 - **Correção Crítica de Raycasting (Anti-Subida em Árvores)**: Solucionado o bug em que o personagem subia em árvores, arbustos e pedras ao invés de permanecer no chão. O `THREE.Raycaster` disparado de cima para baixo retornava como "chão" o primeiro objeto interceptado — que muitas vezes era o topo da copa das árvores. A lógica foi alterada para percorrer **todas as intersecções** e selecionar aquela com o **menor valor de Y** (ponto mais baixo), que corresponde ao solo real do terreno.
 
