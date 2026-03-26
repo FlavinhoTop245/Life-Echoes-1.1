@@ -91,39 +91,54 @@
             // Céu azul e ensolarado para o Menu
             this.menuScene.background = makeColor(0x5caede);
 
-            // Renderer
-            this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+            // Renderer com proteção de Contexto
+            try {
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: this.canvas, 
+                    antialias: true,
+                    powerPreference: "high-performance",
+                    failIfMajorPerformanceCaveat: true // Evita carregar se o hardware estiver travando
+                });
+            } catch (e) {
+                console.warn("Erro ao criar WebGL. Tentando modo de baixa performance...");
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false });
+            }
+
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             this.renderer.shadowMap.enabled = true;
-            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Deixa as bordas das sombras mais elegantes
+            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-            // Implementação de Tone Mapping (HDR Cinematográfico) para brilho alto sem "estourar" a imagem branca
             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            this.renderer.toneMappingExposure = 1.6; // Exposição bem mais alta para clarear os elementos
+            this.renderer.toneMappingExposure = 1.6;
 
-            // Camera setup
             this.updateCameraProjection();
-
-            // Lights for both scenes
             this.addLights(this.scene);
             this.addLights(this.menuScene);
-
-            // Load Assets
             this.loadAssets();
             this.buildPlayer();
-
-            // Audio
             this.setupAudio();
-
-            // UI Events
             this.setupUIEvents();
 
-            // Resize
-            window.addEventListener('resize', () => {
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.updateCameraProjection();
-            });
+            // Garantir cursor visível
+            document.documentElement.style.cursor = 'default';
+            document.body.style.cursor = 'default';
+
+            // AUTO-START Intro Visual (sem áudio por causa de bloqueios)
+            document.getElementById('intro-ggj').classList.add('active'); 
+            this.runIntro();
+
+            // Áudio só inicia na interação (obrigatório pelo navegador)
+            const unlockAudio = () => {
+                if (!this._menuMusicStarted && this.state === 'MENU') {
+                    this._menuMusicStarted = true;
+                    this.audioMenu.play().then(() => this._fadeAudioIn(this.audioMenu, 4000)).catch(() => {});
+                }
+                document.removeEventListener('mousedown', unlockAudio);
+                document.removeEventListener('keydown', unlockAudio);
+            };
+            document.addEventListener('mousedown', unlockAudio);
+            document.addEventListener('keydown', unlockAudio);
 
             // Input
             window.addEventListener('keydown', (e) => this.keys[e.code] = true);
@@ -156,8 +171,6 @@
         setupAudio() {
             this.musicVolume = 0.25;
             this.sfxVolume   = 0.35;
-            this.musicVolume = 0.8;
-            this.sfxVolume   = 1.0;
 
             this._walkPlaying = false;
             this._menuMusicStarted = false;
@@ -176,27 +189,42 @@
             this.sfxWalk = new Audio('sfx/sfxWalk.mp3');
             this.sfxWalk.loop = true;
             this.sfxWalk.volume = this.sfxVolume;
+        }
 
-            // Tenta iniciar música de menu
-            const startMenu = () => {
-                if (this._menuMusicStarted || this.state !== 'MENU') return;
-                this.audioMenu.play().then(() => {
-                    this._menuMusicStarted = true;
-                    this._fadeAudioIn(this.audioMenu, 2000);
-                    // Remove listeners upon true success
-                    document.removeEventListener('click', startMenu);
-                    document.removeEventListener('keydown', startMenu);
-                }).catch(() => {});
-            };
+        async runIntro() {
+            const delay = 3500; // Tempo de cada frase
+            const steps = ['intro-ggj', 'intro-fecap', 'intro-studio'];
+            
+            for (let i = 0; i < steps.length; i++) {
+                await sleep(delay);
+                document.getElementById(steps[i]).classList.remove('active');
+                await sleep(1500); // Intervalo de tela preta entre frases
+                if (i < steps.length - 1) {
+                    document.getElementById(steps[i+1]).classList.add('active');
+                }
+            }
 
-            // Initial manual attempt to start auto-play
-            this.audioMenu.play().then(() => { 
-                this._menuMusicStarted = true; 
-                this._fadeAudioIn(this.audioMenu, 2000); 
-            }).catch(() => {});
+            // Fim da intro preta
+            const introSequence = document.getElementById('intro-sequence');
+            introSequence.style.transition = 'opacity 3s ease-in-out';
+            introSequence.style.opacity = '0';
+            
+            // O áudio agora é disparado pelo listener de 'mousedown' no init(),
+            // garantindo que toque assim que o usuário interagir.
 
-            document.addEventListener('click', startMenu);
-            document.addEventListener('keydown', startMenu);
+            await sleep(3000);
+            
+            // Aparece o Menu (Título e Botões)
+            const splash = document.getElementById('splash-screen');
+            splash.style.display = 'flex'; // Torna visível para o layout
+            
+            // Pequeno delay para forçar o browser a registrar o 'display: flex' antes da opacidade
+            await sleep(50);
+            splash.classList.remove('pre-start');
+
+            // Remove a intro do fluxo para não bloquear cliques nos botões
+            introSequence.classList.add('hidden');
+            document.body.style.cursor = 'default';
         }
 
         _fadeAudioIn(audio, duration) {
@@ -591,17 +619,20 @@
             }
 
             this.spriteMat.map = frames[this.spriteFrame] || this.spriteTextures.idle[0];
-            this.spriteMat.needsUpdate = true;
             
             // "Billboarding" Puro: Sempre olha para a câmera
             if (this.camera) {
+                // Sincroniza o Billboard
                 this.spriteMesh.quaternion.copy(this.camera.quaternion);
-                // Trava a rotação em X e Z para ele não ficar "deitado" se a câmera olhar de cima
                 const euler = new THREE.Euler().setFromQuaternion(this.spriteMesh.quaternion, 'YXZ');
-                euler.x = 0;
-                euler.z = 0;
+                euler.x = 0; euler.z = 0;
                 this.spriteMesh.quaternion.setFromEuler(euler);
             }
+
+            // Garante que o sprite apareça na frente de folhagens e objetos transparentes
+            this.playerGroup.renderOrder = 999;
+            this.spriteMesh.children.forEach(child => child.renderOrder = 999);
+            
             this.spriteMesh.scale.x = this.facingRight ? -1 : 1;
         }
 

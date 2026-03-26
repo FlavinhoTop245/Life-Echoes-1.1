@@ -38,6 +38,16 @@ Devido às restrições de segurança do navegador (CORS) para módulos JavaScri
 
 ## 📜 Log de Modificações (Patches)
 
+### [Patch 1.43.0] - Março de 2026
+- **Sequência de Introdução Cinematográfica**: Implementada uma intro de "filme" antes do menu principal. 
+  1. A experiência começa em tela preta total para imersão.
+  2. Três telas de créditos surgem sequencialmente com fade in/out suave: Global Game Jam Next 2026, Apoio FECAP e Estúdio apresenta.
+  3. Transição orquestrada: O fundo 3D da floresta surge lentamente através de um fade de 3 segundos, sincronizado com o surgimento gradual da música tema.
+  4. O título e botões do menu são os últimos a aparecer, garantindo que o jogador aprecie o cenário antes de interagir.
+
+### [Patch 1.42.0] - Março de 2026
+- **Realce Visual do Protagonista**: Adicionado um contorno preto grosso ao redor de todos os frames do mico-leão-dourado. O motor agora processa cada sprite em tempo real, gerando um "stroke" de 5 pixels que ajuda na identificação do personagem contra o cenário 3D, conferindo uma estética de desenho animado/HQ.
+
 ### [Patch 1.41.0] - Março de 2026
 - **Sistema de Animação de Alta Fidelidade (Individual Sprites)**: O sistema de sprites foi migrado de um único sheet para carregamento individual da pasta `sprites/character/`. 
   1. **Walking**: Implementado loop customizado de 6 frames (`1-2-3-4-3-2`) para uma fluidez orgânica. 
