@@ -387,6 +387,10 @@
             this.sfxWalk = new Audio('sfx/sfxWalk.mp3');
             this.sfxWalk.loop = true;
             this.sfxWalk.volume = this.sfxVolume;
+
+            this.audioCredits = new Audio('music/musicEndCredits.mp3');
+            this.audioCredits.loop = true;
+            this.audioCredits.volume = 0;
         }
 
         async runIntro() {
@@ -427,7 +431,7 @@
 
         _fadeAudioIn(audio, duration) {
             if (!audio) return;
-            const target = audio === this.audioMenu || audio === this.audioGameplay ? this.musicVolume : this.sfxVolume;
+            const target = (audio === this.audioMenu || audio === this.audioGameplay || audio === this.audioCredits) ? this.musicVolume : this.sfxVolume;
             audio.volume = 0;
             const steps = 40, stepTime = duration / steps;
             let step = 0;
@@ -446,7 +450,8 @@
                 if (step >= steps || audio.volume <= 0) { 
                     clearInterval(id); 
                     audio.pause(); 
-                    audio.currentTime = 0; 
+                    // No resetamos currentTime se quisermos continuar de onde parou, mas para musicas novas, resetamos.
+                    try { audio.currentTime = 0; } catch(e) {}
                     if (cb) cb(); 
                 }
             }, stepTime);
@@ -985,9 +990,15 @@
             const splash = document.getElementById('splash-screen');
             splash.classList.add('hidden'); 
             
-            // 2. Transição de áudio gradual
-            this._fadeAudioOut(this.audioMenu, 2000, () => {
-                this.audioGameplay.play().then(() => this._fadeAudioIn(this.audioGameplay, 3000)).catch(() => {});
+            // 2. Transição de áudio gradual em background
+            // Iniciamos o play do gameplay imediatamente para carregar o buffer, mas volume 0
+            if (this.audioGameplay) {
+                this.audioGameplay.volume = 0;
+                this.audioGameplay.play().catch(() => {});
+            }
+
+            this._fadeAudioOut(this.audioMenu, 2500, () => {
+                if (this.audioGameplay) this._fadeAudioIn(this.audioGameplay, 3000);
             });
 
             await sleep(1500); // Aguarda o menu sumir completamente para o preto
@@ -1231,6 +1242,14 @@
             this.climaxActive = false;
             this.state = 'CREDITS';
             
+            // Força a parada imediata de sons de passos e gameplay
+            this.setWalkSound(false);
+            if (this.sfxWalk) {
+                this.sfxWalk.pause();
+                this.sfxWalk.currentTime = 0;
+            }
+            this._fadeAudioOut(this.audioGameplay, 1000);
+
             const climax = document.getElementById('climax-screen');
             if (climax) climax.classList.remove('active');
 
@@ -1240,10 +1259,25 @@
                 credits.classList.add('active');
             }
 
-            // Reinicia o jogo após o término da rolagem (45s de animação + 2s de fade)
+            // Transição de Áudio: Silêncio total por 3 segundos, depois música de créditos
+            setTimeout(() => {
+                if (this.audioCredits) {
+                    this.audioCredits.volume = 0;
+                    this.audioCredits.play().then(() => {
+                        this._fadeAudioIn(this.audioCredits, 5000);
+                    }).catch(e => {
+                        console.warn("Retrying credits audio...", e);
+                        // Tentar novamente com volume direto em caso de falha de fade
+                        this.audioCredits.volume = this.musicVolume;
+                        this.audioCredits.play().catch(() => {});
+                    });
+                }
+            }, 3000);
+
+            // Reinicia o jogo após o término da rolagem
             setTimeout(() => {
                 window.location.reload();
-            }, 47000);
+            }, 55000);
         }
 
         gameOver() {
